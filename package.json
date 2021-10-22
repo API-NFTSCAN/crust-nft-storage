@@ -1,0 +1,21 @@
+{
+  "name": "nftscan-saver",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/badkk/nftscan-saver",
+  "author": "LowEntropyBody <jszyyx@163.com>",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@types/node": "^16.11.2",
+    "ts-node": "^10.3.0",
+    "typescript": "^4.4.4"
+  },
+  "scripts": {
+    "debug": "nodemon src/index.ts",
+    "start": "node build/src/index.js",
+    "build": "tsc -p ./"
+  },
+  "dependencies": {
+    "nodemon": "^2.0.14"
+  }
+}
