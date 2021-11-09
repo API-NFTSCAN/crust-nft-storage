@@ -2,7 +2,7 @@ import UrlIterator from '../utils/urlIterator';
 import { httpGet, sleep } from '../utils/utils';
 import { OrderQueueInfo, ProcessInfo } from '../types/types';
 import Chain from '../chain';
-import IPFS from '../ipfs';
+import Ipfs from '../ipfs';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
@@ -23,7 +23,7 @@ const orderNumLimitDefault = 100
 
 export default class NFTScan {
   public readonly chain: Chain
-  private ipfsInst: IPFS;
+  private ipfsInst: Ipfs;
   private processInfo: ProcessInfo
   private processBar: typeof SingleBar
   private processNum: number
@@ -39,7 +39,7 @@ export default class NFTScan {
       dirSize: 0,
       dirNum: 0
     }
-    this.ipfsInst = new IPFS()
+    this.ipfsInst = new Ipfs()
     this.chain = new Chain()
     this.processInfo = {
       tx: '',

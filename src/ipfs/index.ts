@@ -2,7 +2,7 @@ import { create, globSource } from 'ipfs';
 import Ctl from 'ipfsd-ctl';
 import { PinFileItem, PinResult } from '../types/types';
 
-export default class IPFS {
+export default class Ipfs {
   private ipfsClient: any;
   private readonly addOption: object = {
     pin: true,
