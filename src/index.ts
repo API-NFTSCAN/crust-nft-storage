@@ -18,14 +18,22 @@ async function main() {
     let resMsg = ''
     if ('/process' === url.pathname) {
       const tx = url.searchParams.get('tx')
+      const orderNumLimit = url.searchParams.get('orderNumLimit')
+      const orderSizeLimit = url.searchParams.get('orderSizeLimit')
       if (tx !== null) {
         const runningTask = ni.getRunningTask()
         if (runningTask !== '') {
           resMsg = `another process(tx:${runningTask}) is running`
           resCode = 400
         } else {
+          if (orderNumLimit !== null) { 
+            ni.setOrderNumLimit(parseInt(orderNumLimit)) 
+          }
+          if (orderSizeLimit !== null) { 
+            ni.setOrderSizeLimit(parseInt(orderSizeLimit))
+          }
           ni.requestProcess(tx)
-          resMsg = `task added successfully`
+          resMsg = `task(tx:${tx}) added successfully`
         }
       } else {
         resMsg = 'illegal parameter, need parameter:tx'
