@@ -6,19 +6,19 @@ export default class Chain {
   private readonly seeds = 'burger proud marine napkin business menu ankle combine diesel eager mushroom culture'
   private chainAddr = 'wss://rpc.crust.network'
   private ipfsGateway = 'https://ipfs.io'
-  private chain: any
+  private chainApi: any
 
   async connect2Chain() {
     // Try to connect to Crust Chain
-    this.chain = new ApiPromise({
+    this.chainApi = new ApiPromise({
       provider: new WsProvider(this.chainAddr),
       typesBundle: typesBundleForPolkadot
     });
-    await this.chain.isReadyOrError;
+    await this.chainApi.isReadyOrError;
   }
 
   disconnect() {
-    this.chain.disconnect()
+    this.chainApi.disconnect()
   }
 
   getChainConfig() {
@@ -60,7 +60,7 @@ export default class Chain {
     let txRes: any
     let tryout = 0
     while (tryout++ < 10) {
-      const tx = this.chain.tx.market.placeStorageOrder(cid, size, 0, '');
+      const tx = this.chainApi.tx.market.placeStorageOrder(cid, size, 0, '');
 
       // Send tx and disconnect chain
       try {
