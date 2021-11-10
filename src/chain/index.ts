@@ -1,17 +1,15 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { typesBundleForPolkadot, types } from '@crustio/type-definitions';
 import { checkCid, checkSeeds, sendTx, sleep } from '../utils/utils';
+import { chainAddr, seeds } from '../consts'
 
 export default class Chain {
-  private readonly seeds = 'burger proud marine napkin business menu ankle combine diesel eager mushroom culture'
-  private chainAddr = 'wss://rpc.crust.network'
-  private ipfsGateway = 'https://ipfs.io'
   private chainApi: any
 
   async connect2Chain() {
     // Try to connect to Crust Chain
     this.chainApi = new ApiPromise({
-      provider: new WsProvider(this.chainAddr),
+      provider: new WsProvider(chainAddr),
       typesBundle: typesBundleForPolkadot
     });
     await this.chainApi.isReadyOrError;
@@ -21,40 +19,14 @@ export default class Chain {
     this.chainApi.disconnect()
   }
 
-  getChainConfig() {
-    return {
-      chainAddr: this.chainAddr,
-      ipfsGateway: this.ipfsGateway
-    }
-  }
-
-  setChainAddr(chainAddr: string) {
-    this.chainAddr = chainAddr
-  }
-
-  setIPFSGateway(ipfsGateway: string) {
-    this.ipfsGateway = ipfsGateway
-  }
-
   async order(cid: string, size: number) {
     // Check cid and seeds
     if (!checkCid(cid)) {
       throw new Error(`Illegal cid:'${cid}'`);
     }
-    if (!checkSeeds(this.seeds)) {
+    if (!checkSeeds(seeds)) {
       throw new Error('Illegal seeds');
     }
-
-    // Get file size by hard code instead of requsting ipfs.gateway(leads timeout)
-    // const ipfs = axios.create({
-    //     baseURL: ipfsGateway + '/api/v0',
-    //     timeout: 60 * 1000, // 1 min
-    //     headers: {'Content-Type': 'application/json'},
-    // });
-    // const res = await ipfs.post(`/object/stat?arg=${cid}`);
-    // const objInfo = parseObj(res.data);
-    // const size = objInfo.CumulativeSize;
-    // console.log(`Got IPFS object size: ${size}`);
 
     // Construct tx
     let txRes: any
@@ -64,7 +36,7 @@ export default class Chain {
 
       // Send tx and disconnect chain
       try {
-        txRes = await sendTx(tx, this.seeds);
+        txRes = await sendTx(tx, seeds);
       } catch(e: any) {
         console.error('Send transaction failed')
       }
