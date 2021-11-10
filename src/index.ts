@@ -1,7 +1,7 @@
 import NFTScan from './nftscan';
+import { port } from './consts'
 
 const http = require('http');
-const port = 8765
 
 async function main() {
   const ni = new NFTScan()
@@ -45,28 +45,6 @@ async function main() {
         resMsg = 'no task is running'
       } else {
         resBody = info
-      }
-    } else if ('/chainConfig' === url.pathname) {
-      resBody = ni.chain.getChainConfig()
-    } else if ('/configChain' === url.pathname) {
-      const chainAddr = url.searchParams.get('chainAddr')
-      const ipfsGateway = url.searchParams.get('ipfsGateway')
-      resMsg = 'Set'
-      if (chainAddr !== null) {
-        ni.chain.setChainAddr(chainAddr)
-        console.log(`Set chain address to:${chainAddr}`)
-        resMsg += ' chain address'
-      }
-      if (ipfsGateway !== null) {
-        ni.chain.setIPFSGateway(ipfsGateway)
-        console.log(`Set ipfs gateway to:${ipfsGateway}`)
-        resMsg += ' ipfs gateway'
-      }
-      if (resMsg === 'Set') {
-        resMsg += ' successfully'
-      } else {
-        resMsg = 'Invalid parameter'
-        resCode = 400
       }
     } else {
       resMsg = `unknown request:${url.pathname}`

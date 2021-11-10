@@ -15,7 +15,6 @@ const { SingleBar } = require('cli-progress')
 
 const lock = new AsyncLock()
 const downloadLock = 'downloadLock'
-const txHash = '0xcdb7c1a6fe7e112210ca548c214f656763e13533'
 const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
 const storePrefix = 'nft-'
 const orderSizeLimitDefault = 5 * 1024 * 1024 * 1024
