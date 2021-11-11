@@ -1,4 +1,4 @@
-# nftscan-saver
+# crust-nft-storage
 Save all nftscan's data on Crust
 
 ## Start up
