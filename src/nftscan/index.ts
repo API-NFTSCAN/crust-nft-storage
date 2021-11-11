@@ -167,8 +167,8 @@ export default class NFTScan {
   private async dealWithRest() {
     let tryout = 10
     while (this.failedUrls.length > 0 && tryout-- > 0) {
-      const urls =[...this.failedUrls]
-      this.failedUrls = []
+      const len = Math.min(this.orderNumLimit, this.failedUrls.length)
+      const urls = this.failedUrls.splice(0, len)
       const promises = await this.doDownload(urls)
       for (const p of promises) { await p }
       await this.addAndOrder()
