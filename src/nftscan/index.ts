@@ -164,12 +164,21 @@ export default class NFTScan {
     return promises
   }
 
+  private cleanTmpDirs() {
+    for (const dir of this.orderQueueInfo.queue) {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+    if (this.orderQueueInfo.dir !== '') {
+      fs.rmSync(this.orderQueueInfo.dir, { recursive: true, force: true })
+    }
+  }
+
   private async dealWithRest() {
     let tryout = 10
     while (this.failedUrls.length > 0 && tryout-- > 0) {
-      const urls =[...this.failedUrls]
-      this.failedUrls = []
-      const promises = await this.doDownload(urls)
+      const len = Math.min(this.orderNumLimit, this.failedUrls.length)
+      const urls = this.failedUrls.splice(0, len)
+      const promises = this.doDownload(urls)
       for (const p of promises) { await p }
       await this.addAndOrder()
     }
@@ -182,6 +191,7 @@ export default class NFTScan {
           resolve(data)
         } else {
           fs.rmSync(dir, { recursive: true, force: true })
+          this.orderQueueInfo.dir = ''
           reject(err)
         }
       })
@@ -239,12 +249,15 @@ export default class NFTScan {
     } catch(e: any) {
       console.error(e.message)
     } finally {
+      this.cleanTmpDirs()
       this.initProcessInfo()
       this.processBar.stop();
     }
   }
 
   async UpdateUpstream() {
+    // TODO: Update nft address with Crust network order id. If you want to get a nft's replica,
+    // corresponding order id with this nft should be recorded in NFTScan's database
     console.log('=> Updating upstream status...')
   }
 
