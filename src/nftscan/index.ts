@@ -256,6 +256,8 @@ export default class NFTScan {
   }
 
   async UpdateUpstream() {
+    // TODO: Update nft address with Crust network order id. If you want to get a nft's replica,
+    // corresponding order id with this nft should be recorded in NFTScan's database
     console.log('=> Updating upstream status...')
   }
 
