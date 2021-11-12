@@ -1,7 +1,10 @@
 import { SubmittableExtrinsic } from '@polkadot/api/promise/types';
 import { Keyring } from '@polkadot/keyring';
-import https from 'https';
+import { ApiPromise, WsProvider } from '@polkadot/api';
+import { typesBundleForPolkadot } from '@crustio/type-definitions';
 import { HttpGetRes } from '../types/types';
+import { chainAddr } from '../consts';
+import https from 'https';
 
 /* PUBLIC METHODS */
 /**
@@ -53,6 +56,10 @@ export function httpGet(url: string): Promise<HttpGetRes> {
  */
 export function checkCid(cid: string) {
   return cid.length === 46 && cid.substr(0, 2) === 'Qm';
+}
+
+export function parsObj(obj: any) {
+  return JSON.parse(JSON.stringify(obj));
 }
 
 /**
@@ -111,6 +118,34 @@ export async function sendTx(tx: SubmittableExtrinsic, seeds: string) {
           reject(e);
       });
   });
+}
+
+export async function checkReplica(cid: string) {
+  let fileReplica = 0
+  // Check cid
+  if (!checkCid(cid)) {
+    throw new Error('Illegal inputs');
+  }
+
+  // Try to connect to Crust Chain
+  const chain = new ApiPromise({
+    provider: new WsProvider(chainAddr),
+    typesBundle: typesBundleForPolkadot
+  });
+
+  await chain.isReadyOrError;
+
+  const file = parsObj(await chain.query.market.files(cid));
+
+  if (file) {
+    fileReplica = file.reported_replica_count
+  } else {
+    console.error('File not found or no replicas')
+  }
+
+  await chain.disconnect();
+
+  return fileReplica
 }
 
 /* PRIVATE METHODS  */

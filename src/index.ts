@@ -1,5 +1,6 @@
 import NFTScan from './nftscan';
 import { port } from './consts'
+import { checkReplica } from './utils/utils'
 
 const http = require('http');
 
@@ -45,6 +46,23 @@ async function main() {
         resMsg = 'no task is running'
       } else {
         resBody = info
+      }
+    } else if ('/replica' === url.pathname) {
+      const cid = url.searchParams.get('cid')
+      if (cid !== null) {
+        try {
+          const replica = await checkReplica(cid)
+          resBody = {
+            cid: cid,
+            replica: replica
+          }
+        } catch(e: any) {
+          resMsg = `Get file:'${cid}' replica failed`
+          resCode = 500
+        }
+      } else {
+        resMsg = 'illegal parameter, need parameter:cid'
+        resCode = 500
       }
     } else {
       resMsg = `unknown request:${url.pathname}`
