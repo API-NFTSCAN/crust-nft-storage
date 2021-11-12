@@ -3,7 +3,7 @@ import { Keyring } from '@polkadot/keyring';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { typesBundleForPolkadot } from '@crustio/type-definitions';
 import { HttpGetRes } from '../types/types';
-import { chainAddr } from '../consts';
+import { chainAddr, httpTimeout } from '../consts';
 import https from 'https';
 
 /* PUBLIC METHODS */
@@ -23,7 +23,7 @@ export function sleep(microsec: number) {
  */
 export function httpGet(url: string): Promise<HttpGetRes> {
   return new Promise((resolve, reject) => {
-    https.get(url, {timeout: 3600000}, function(res: any) {
+    https.get(url, {timeout: httpTimeout}, function(res: any) {
       const { statusCode } = res
       let tmpData: string = ''
       if (statusCode === 200 ) {

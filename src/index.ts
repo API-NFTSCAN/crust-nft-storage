@@ -33,7 +33,7 @@ async function main() {
           if (orderSizeLimit !== null) { 
             ni.setOrderSizeLimit(parseInt(orderSizeLimit))
           }
-          ni.requestProcess(tx)
+          ni.doProcess(tx)
           resMsg = `task(tx:${tx}) added successfully`
         }
       } else {
