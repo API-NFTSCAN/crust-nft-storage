@@ -34,6 +34,10 @@ export default class NFTScan {
   private orderNumLimit: number
 
   constructor() {
+    // queue: directories ready for order
+    // dir: being processed directory
+    // dirSize: total size of dir
+    // dirNum: total file number of dir
     this.orderQueueInfo = {
       queue: [],
       dir: '',
@@ -168,10 +172,10 @@ export default class NFTScan {
           // Deal with error
         }))
       }
-      Array.prototype.push.apply(this.failedUrls, _urls)
       for (const p of promises) { await p }
       await this.addAndOrder()
     }
+    Array.prototype.push.apply(this.failedUrls, _urls)
   }
 
   private cleanTmpDirs() {
@@ -187,6 +191,7 @@ export default class NFTScan {
     // Try failed urls again
     const promises = await this._doProcess(this.failedUrls)
 
+    // Deal with left directory
     await new Promise((resolve, reject) => {
       const dir =this.orderQueueInfo.dir
       fs.readdir(dir, async (err: any, data: any) => {
@@ -214,7 +219,7 @@ export default class NFTScan {
         hideCursor: true
       }, cliProgress.Presets.shades_classic);
 
-      // Initialize progress bar
+      // Get metadata
       let getRes = await httpGet(`${baseUrl}?searchValue=${tx}&pageIndex=0&pageSize=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
@@ -240,7 +245,7 @@ export default class NFTScan {
       let urlIter = new UrlIterator(baseUrl, tx, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
-        const promises = await this._doProcess(urls)
+        await this._doProcess(urls)
       }
 
       // Deal with failed
