@@ -7,6 +7,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { mkdtemp } from 'fs/promises';
+import { httpTimeout } from '../consts';
 import _colors from 'colors';
 
 const AsyncLock = require('async-lock')
@@ -19,10 +20,11 @@ const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
 const storePrefix = 'nft-'
 const orderSizeLimitDefault = 5 * 1024 * 1024 * 1024
 const orderNumLimitDefault = 100
+const maxDownloadNum = 100
 
 export default class NFTScan {
   public readonly chain: Chain
-  private ipfsInst: Ipfs;
+  private ipfs: Ipfs;
   private processInfo: ProcessInfo
   private processBar: typeof SingleBar
   private processNum: number
@@ -32,13 +34,17 @@ export default class NFTScan {
   private orderNumLimit: number
 
   constructor() {
+    // queue: directories ready for order
+    // dir: being processed directory
+    // dirSize: total size of dir
+    // dirNum: total file number of dir
     this.orderQueueInfo = {
       queue: [],
       dir: '',
       dirSize: 0,
       dirNum: 0
     }
-    this.ipfsInst = new Ipfs()
+    this.ipfs = new Ipfs()
     this.chain = new Chain()
     this.processInfo = {
       tx: '',
@@ -56,7 +62,7 @@ export default class NFTScan {
 
   async init() {
     // Start IPFS
-    await this.ipfsInst.startIPFS()
+    await this.ipfs.startIPFS()
   }
 
   private initProcessInfo() {
@@ -69,13 +75,18 @@ export default class NFTScan {
     }
   }
 
+  private initOrderParameters() {
+    this.orderNumLimit = orderNumLimitDefault
+    this.orderSizeLimit = orderSizeLimitDefault
+  }
+
   private async addAndOrder() {
     // Order files on crust network
     if (this.orderQueueInfo.queue.length > 0) {
       console.log(`\n=> start to order`)
       try {
         for (const dir of this.orderQueueInfo.queue) {
-          const pinRes = await this.ipfsInst.pin(dir)
+          const pinRes = await this.ipfs.pin(dir)
           const { status } = pinRes
           if (status) {
             const { cid } = pinRes
@@ -105,12 +116,17 @@ export default class NFTScan {
     this.processInfo.remaining = this.processInfo.total - this.processNum
   }
 
-  private doDownload(urls: string[]) {
-    let promises = []
+  private async _doProcess(urls: string[]) {
     const that = this
-    for (const url of urls) {
+    let _urls = [...urls]
+    let tryout = 10
+    while (_urls.length > 0 && tryout-- > 0) {
+      const len = Math.min(maxDownloadNum, _urls.length)
+      const tmpUrls = _urls.splice(0, len)
+      let promises = []
+      for (const url of tmpUrls) {
         promises.push(new Promise((resolve, reject) => {
-          https.get(url, {timeout: 3600000}, async function(res: any) {
+          https.get(url, {timeout: httpTimeout}, async function(res: any) {
             const { statusCode } = res
             const fileName = path.basename(url)
             if (statusCode === 200 ) {
@@ -154,14 +170,17 @@ export default class NFTScan {
             that.refreshProgress(fileName)
           }).on('error', (e: any) => {
             console.error(`\nDownload failed, will retry later, error message:${e.message}`)
-            that.failedUrls.push(url)
+            _urls.push(url)
             reject(e)
           })
         }).catch((e: any) => {
           // Deal with error
         }))
+      }
+      for (const p of promises) { await p }
+      await this.addAndOrder()
     }
-    return promises
+    Array.prototype.push.apply(this.failedUrls, _urls)
   }
 
   private cleanTmpDirs() {
@@ -174,14 +193,10 @@ export default class NFTScan {
   }
 
   private async dealWithRest() {
-    let tryout = 10
-    while (this.failedUrls.length > 0 && tryout-- > 0) {
-      const len = Math.min(this.orderNumLimit, this.failedUrls.length)
-      const urls = this.failedUrls.splice(0, len)
-      const promises = this.doDownload(urls)
-      for (const p of promises) { await p }
-      await this.addAndOrder()
-    }
+    // Try failed urls again
+    const promises = await this._doProcess(this.failedUrls)
+
+    // Deal with left directory
     await new Promise((resolve, reject) => {
       const dir =this.orderQueueInfo.dir
       fs.readdir(dir, async (err: any, data: any) => {
@@ -198,7 +213,7 @@ export default class NFTScan {
     }).catch((e: any) => {})
   }
 
-  async requestProcess(tx: string) {
+  async doProcess(tx: string) {
     try {
       console.log(`=> Dealing with tx:${tx}`)
       this.processInfo.tx = tx
@@ -209,7 +224,7 @@ export default class NFTScan {
         hideCursor: true
       }, cliProgress.Presets.shades_classic);
 
-      // Initialize progress bar
+      // Get metadata
       let getRes = await httpGet(`${baseUrl}?searchValue=${tx}&pageIndex=0&pageSize=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
@@ -235,9 +250,7 @@ export default class NFTScan {
       let urlIter = new UrlIterator(baseUrl, tx, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
-        const promises = this.doDownload(urls)
-        for (const p of promises) { await p }
-        await this.addAndOrder()
+        await this._doProcess(urls)
       }
 
       // Deal with failed
@@ -249,8 +262,10 @@ export default class NFTScan {
     } catch(e: any) {
       console.error(e.message)
     } finally {
+      console.log(`total:${this.processInfo.total}, success:${this.processInfo.complete}, failed:${this.processInfo.remaining}`)
       this.cleanTmpDirs()
       this.initProcessInfo()
+      this.initOrderParameters()
       this.processBar.stop();
     }
   }
