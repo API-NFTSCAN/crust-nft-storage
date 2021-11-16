@@ -8,6 +8,15 @@ import https from 'https';
 
 /* PUBLIC METHODS */
 /**
+ * isNumeric
+ * @param {string} str 
+ * @returns boolean
+ */
+export function isNumeric(str: string) {
+  return !isNaN(parseFloat(str))
+}
+
+/**
  * sleep
  * @param {number} microsec 
  * @returns promise

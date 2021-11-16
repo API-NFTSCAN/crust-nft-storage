@@ -38,16 +38,16 @@ yarn && yarn start
 ### '/process' API
 
 ```
-curl -XPOST http://localhost:<port>/api/v0/process?tx=xxx&orderNumLimit=xxx&orderSizeLimit=xxx
+curl -XPOST 'http://localhost:<port>/api/v0/process?tx=xxx&orderNumLimit=xxx&orderSizeLimit=xxx'
 ```
 
 #### Description
 Order nfts
 
 #### Parameter
-1. tx: required, transaction hash
-1. orderNumLimit: optional, max total file number limit per order, default is 100
-1. orderSizeLimit: optional, max total file size limit per order, default is 5GB
+1. tx [string]: required, transaction hash
+1. orderNumLimit [number]: optional, max total file number limit per order, default is 500
+1. orderSizeLimit [number]: optional, max total file size limit per order, default is 5 * 1024 * 1024 (5GB), max value is 10GB
 
 #### Output
 ```
@@ -60,7 +60,7 @@ Order nfts
 ### '/progress' API
 
 ```
-curl -XGET http://localhost:<port>/api/v0/progress
+curl -XGET 'http://localhost:<port>/api/v0/progress'
 ```
 
 #### Description
@@ -85,14 +85,14 @@ Check running task information
 ### '/replica' API
 
 ```
-curl -XGET http://localhost:<port>/api/v0/replica?cid=xxx
+curl -XGET 'http://localhost:<port>/api/v0/replica?cid=xxx'
 ```
 
 #### Description
 Get indicated order's replica through Crust network
 
 #### Parameter
-1. cid: required, IPFS content id
+1. cid [string]: required, IPFS content id
 
 #### Output
 ```

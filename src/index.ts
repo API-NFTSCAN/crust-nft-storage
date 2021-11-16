@@ -1,6 +1,7 @@
 import NFTScan from './nftscan';
+import { orderSizeDefault, orderNumDefault } from './nftscan';
 import { port } from './consts'
-import { checkReplica } from './utils/utils'
+import { checkReplica, isNumeric } from './utils/utils'
 
 const http = require('http');
 
@@ -40,14 +41,23 @@ async function main() {
             resMsg = `another process(tx:${runningTask}) is running`
             resCode = 400
           } else {
-            if (orderNumLimit !== null) { 
-              ni.setOrderNumLimit(parseInt(orderNumLimit)) 
+            let paramInfo = ''
+            if (orderNumLimit !== null) {
+              if (isNumeric(orderNumLimit)) {
+                paramInfo += ni.setOrderNumLimit(parseInt(orderNumLimit))
+              } else {
+                paramInfo += ` Invalid parameter orderNumLimit:${orderNumLimit}, use default:${orderNumDefault}.`
+              }
             }
-            if (orderSizeLimit !== null) { 
-              ni.setOrderSizeLimit(parseInt(orderSizeLimit))
+            if (orderSizeLimit !== null) {
+              if (isNumeric(orderSizeLimit)) { 
+                paramInfo += ni.setOrderSizeLimit(parseInt(orderSizeLimit))
+              } else {
+                paramInfo += ` Invalid parameter orderSizeLimit:${orderSizeLimit}, use default:${orderSizeDefault}.`
+              }
             }
             ni.doProcess(tx)
-            resMsg = `task(tx:${tx}) added successfully`
+            resMsg = `task(tx:${tx}) added successfully!` + paramInfo
           }
         } else {
           resMsg = 'illegal parameter, need parameter:tx'

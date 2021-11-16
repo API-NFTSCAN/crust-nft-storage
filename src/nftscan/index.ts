@@ -18,9 +18,12 @@ const lock = new AsyncLock()
 const downloadLock = 'downloadLock'
 const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
 const storePrefix = 'nft-'
-const orderSizeLimitDefault = 5 * 1024 * 1024 * 1024
-const orderNumLimitDefault = 100
 const maxDownloadNum = 100
+
+const orderSizeLowerLimit = 100 * 1024 * 1024
+const orderSizeUpperLimit = 10 * 1024 * 1024 * 1024
+export const orderNumDefault = 500
+export const orderSizeDefault = 5 * 1024 * 1024 * 1024
 
 export default class NFTScan {
   public readonly chain: Chain
@@ -53,8 +56,8 @@ export default class NFTScan {
       remaining: 0,
       completeOrder: []
     }
-    this.orderNumLimit = orderNumLimitDefault
-    this.orderSizeLimit = orderSizeLimitDefault
+    this.orderNumLimit = orderNumDefault
+    this.orderSizeLimit = orderSizeDefault
     this.processBar = {}
     this.processNum = 0
     this.failedUrls = []
@@ -76,8 +79,8 @@ export default class NFTScan {
   }
 
   private initOrderParameters() {
-    this.orderNumLimit = orderNumLimitDefault
-    this.orderSizeLimit = orderSizeLimitDefault
+    this.orderNumLimit = orderNumDefault
+    this.orderSizeLimit = orderSizeDefault
   }
 
   private async addAndOrder() {
@@ -285,7 +288,11 @@ export default class NFTScan {
   }
 
   setOrderNumLimit(limit: number) {
+    if (limit < 1) {
+      return ` orderNumLimit should be greater than 1, use default:${orderNumDefault}`
+    }
     this.orderNumLimit = limit
+    return ''
   }
 
   getOrderNumLimit() {
@@ -293,7 +300,11 @@ export default class NFTScan {
   }
 
   setOrderSizeLimit(limit: number) {
+    if (limit < orderSizeLowerLimit || limit > orderSizeUpperLimit) {
+      return ` ${limit} is out of range, orderSizeLimit should be in [${orderSizeLowerLimit}, ${orderSizeUpperLimit}], use default:${orderSizeDefault}`
+    }
     this.orderSizeLimit = limit
+    return ''
   }
 
   getOrderSizeLimit() {
