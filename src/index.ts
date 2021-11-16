@@ -17,8 +17,20 @@ async function main() {
     let resCode = 200
     let resBody = {}
     let resMsg = ''
+    const restfulHead = '/api/v0'
+    const reqHead = url.pathname.substr(0, restfulHead.length)
+    if (reqHead !== restfulHead) {
+      resBody = {
+        statusCode: 404,
+        message: `unknown request:${url.pathname}`
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(resBody));
+      return
+    }
+    const route = url.pathname.substr(restfulHead.length)
     if (req.method === 'POST') {
-      if ('/process' === url.pathname) {
+      if ('/process' === route) {
         const tx = url.searchParams.get('tx')
         const orderNumLimit = url.searchParams.get('orderNumLimit')
         const orderSizeLimit = url.searchParams.get('orderSizeLimit')
@@ -46,14 +58,14 @@ async function main() {
         resCode = 404
       }
     } else {
-      if ('/progress' === url.pathname) {
+      if ('/progress' === route) {
         const info = ni.getProcessInfo()
         if (info['tx'] === '') {
           resMsg = 'no task is running'
         } else {
           resBody = info
         }
-      } else if ('/replica' === url.pathname) {
+      } else if ('/replica' === route) {
         const cid = url.searchParams.get('cid')
         if (cid !== null) {
           try {
