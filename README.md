@@ -35,7 +35,7 @@ yarn && yarn start
 
 ## APIs
 
-### '/process'
+### '/process' API
 
 ```
 curl -XPOST http://localhost:<port>/process?tx=xxx&orderNumLimit=xxx&orderSizeLimit=xxx
@@ -57,7 +57,7 @@ Order nfts
 }
 ```
 
-### '/progress'
+### '/progress' API
 
 ```
 curl -XGET http://localhost:<port>/progress
@@ -82,7 +82,7 @@ Check running task information
 }
 ```
 
-### '/replica'
+### '/replica' API
 
 ```
 curl -XGET http://localhost:<port>/replica?cid=xxx
