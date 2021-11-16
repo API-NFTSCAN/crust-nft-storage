@@ -75,6 +75,11 @@ export default class NFTScan {
     }
   }
 
+  private initOrderParameters() {
+    this.orderNumLimit = orderNumLimitDefault
+    this.orderSizeLimit = orderSizeLimitDefault
+  }
+
   private async addAndOrder() {
     // Order files on crust network
     if (this.orderQueueInfo.queue.length > 0) {
@@ -260,6 +265,7 @@ export default class NFTScan {
       console.log(`total:${this.processInfo.total}, success:${this.processInfo.complete}, failed:${this.processInfo.remaining}`)
       this.cleanTmpDirs()
       this.initProcessInfo()
+      this.initOrderParameters()
       this.processBar.stop();
     }
   }

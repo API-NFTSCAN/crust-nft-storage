@@ -17,56 +17,63 @@ async function main() {
     let resCode = 200
     let resBody = {}
     let resMsg = ''
-    if ('/process' === url.pathname) {
-      const tx = url.searchParams.get('tx')
-      const orderNumLimit = url.searchParams.get('orderNumLimit')
-      const orderSizeLimit = url.searchParams.get('orderSizeLimit')
-      if (tx !== null) {
-        const runningTask = ni.getRunningTask()
-        if (runningTask !== '') {
-          resMsg = `another process(tx:${runningTask}) is running`
-          resCode = 400
+    if (req.method === 'POST') {
+      if ('/process' === url.pathname) {
+        const tx = url.searchParams.get('tx')
+        const orderNumLimit = url.searchParams.get('orderNumLimit')
+        const orderSizeLimit = url.searchParams.get('orderSizeLimit')
+        if (tx !== null) {
+          const runningTask = ni.getRunningTask()
+          if (runningTask !== '') {
+            resMsg = `another process(tx:${runningTask}) is running`
+            resCode = 400
+          } else {
+            if (orderNumLimit !== null) { 
+              ni.setOrderNumLimit(parseInt(orderNumLimit)) 
+            }
+            if (orderSizeLimit !== null) { 
+              ni.setOrderSizeLimit(parseInt(orderSizeLimit))
+            }
+            ni.doProcess(tx)
+            resMsg = `task(tx:${tx}) added successfully`
+          }
         } else {
-          if (orderNumLimit !== null) { 
-            ni.setOrderNumLimit(parseInt(orderNumLimit)) 
-          }
-          if (orderSizeLimit !== null) { 
-            ni.setOrderSizeLimit(parseInt(orderSizeLimit))
-          }
-          ni.doProcess(tx)
-          resMsg = `task(tx:${tx}) added successfully`
-        }
-      } else {
-        resMsg = 'illegal parameter, need parameter:tx'
-        resCode = 500
-      }
-    } else if ('/progress' === url.pathname) {
-      const info = ni.getProcessInfo()
-      if (info['tx'] === '') {
-        resMsg = 'no task is running'
-      } else {
-        resBody = info
-      }
-    } else if ('/replica' === url.pathname) {
-      const cid = url.searchParams.get('cid')
-      if (cid !== null) {
-        try {
-          const replica = await checkReplica(cid)
-          resBody = {
-            cid: cid,
-            replica: replica
-          }
-        } catch(e: any) {
-          resMsg = `Get file:'${cid}' replica failed`
+          resMsg = 'illegal parameter, need parameter:tx'
           resCode = 500
         }
       } else {
-        resMsg = 'illegal parameter, need parameter:cid'
-        resCode = 500
+        resMsg = `unknown request:${url.pathname}`
+        resCode = 404
       }
     } else {
-      resMsg = `unknown request:${url.pathname}`
-      resCode = 404
+      if ('/progress' === url.pathname) {
+        const info = ni.getProcessInfo()
+        if (info['tx'] === '') {
+          resMsg = 'no task is running'
+        } else {
+          resBody = info
+        }
+      } else if ('/replica' === url.pathname) {
+        const cid = url.searchParams.get('cid')
+        if (cid !== null) {
+          try {
+            const replica = await checkReplica(cid)
+            resBody = {
+              cid: cid,
+              replica: replica
+            }
+          } catch(e: any) {
+            resMsg = `Get file:'${cid}' replica failed`
+            resCode = 500
+          }
+        } else {
+          resMsg = 'illegal parameter, need parameter:cid'
+          resCode = 500
+        }
+      } else {
+        resMsg = `unknown request:${url.pathname}`
+        resCode = 404
+      }
     }
     if (resMsg !== '') {
       resBody = {
