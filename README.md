@@ -48,7 +48,6 @@ Order nfts
 1. tx: required, transaction hash
 1. orderNumLimit: optional, max total file number limit per order, default is 100
 1. orderSizeLimit: optional, max total file size limit per order, default is 5GB
->>>>>>> tony/api_to_restful
 
 #### Output
 ```
