@@ -32,13 +32,13 @@ async function main() {
     const route = url.pathname.substr(restfulHead.length)
     if (req.method === 'POST') {
       if ('/process' === route) {
-        const tx = url.searchParams.get('tx')
+        const address = url.searchParams.get('address')
         const orderNumLimit = url.searchParams.get('orderNumLimit')
         const orderSizeLimit = url.searchParams.get('orderSizeLimit')
-        if (tx !== null) {
+        if (address !== null) {
           const runningTask = ni.getRunningTask()
           if (runningTask !== '') {
-            resMsg = `another process(tx:${runningTask}) is running`
+            resMsg = `another process(address:${runningTask}) is running`
             resCode = 400
           } else {
             let paramInfo = ''
@@ -56,11 +56,11 @@ async function main() {
                 paramInfo += ` Invalid parameter orderSizeLimit:${orderSizeLimit}, use default:${orderSizeDefault}.`
               }
             }
-            ni.doProcess(tx)
-            resMsg = `task(tx:${tx}) added successfully!` + paramInfo
+            ni.doProcess(address)
+            resMsg = `task(address:${address}) added successfully!` + paramInfo
           }
         } else {
-          resMsg = 'illegal parameter, need parameter:tx'
+          resMsg = 'illegal parameter, need parameter:address'
           resCode = 500
         }
       } else {
@@ -70,7 +70,7 @@ async function main() {
     } else {
       if ('/progress' === route) {
         const info = ni.getProcessInfo()
-        if (info['tx'] === '') {
+        if (info['address'] === '') {
           resMsg = 'no task is running'
         } else {
           resBody = info

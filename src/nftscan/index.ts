@@ -18,7 +18,7 @@ const lock = new AsyncLock()
 const downloadLock = 'downloadLock'
 const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
 const storePrefix = 'nft-'
-const maxDownloadNum = 100
+const maxDownloadNum = 50
 
 const orderSizeLowerLimit = 100 * 1024 * 1024
 const orderSizeUpperLimit = 10 * 1024 * 1024 * 1024
@@ -50,7 +50,7 @@ export default class NFTScan {
     this.ipfs = new Ipfs()
     this.chain = new Chain()
     this.processInfo = {
-      tx: '',
+      address: '',
       total: 0,
       complete: 0,
       remaining: 0,
@@ -70,7 +70,7 @@ export default class NFTScan {
 
   private initProcessInfo() {
     this.processInfo = {
-      tx: '',
+      address: '',
       total: 0,
       complete: 0,
       remaining: 0,
@@ -122,7 +122,7 @@ export default class NFTScan {
   private async _doProcess(urls: string[]) {
     const that = this
     let _urls = [...urls]
-    let tryout = 10
+    let tryout = (_urls.length / maxDownloadNum + 1) * 2
     while (_urls.length > 0 && tryout-- > 0) {
       const len = Math.min(maxDownloadNum, _urls.length)
       const tmpUrls = _urls.splice(0, len)
@@ -190,14 +190,17 @@ export default class NFTScan {
     for (const dir of this.orderQueueInfo.queue) {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+    this.orderQueueInfo.queue = []
     if (this.orderQueueInfo.dir !== '') {
       fs.rmSync(this.orderQueueInfo.dir, { recursive: true, force: true })
     }
+    this.orderQueueInfo.dir = ''
   }
 
   private async dealWithRest() {
     // Try failed urls again
     const promises = await this._doProcess(this.failedUrls)
+    this.failedUrls = []
 
     // Deal with left directory
     await new Promise((resolve, reject) => {
@@ -216,10 +219,10 @@ export default class NFTScan {
     }).catch((e: any) => {})
   }
 
-  async doProcess(tx: string) {
+  async doProcess(address: string) {
     try {
-      console.log(`=> Dealing with tx:${tx}`)
-      this.processInfo.tx = tx
+      console.log(`=> Dealing with address:${address} with order number limit:${this.orderNumLimit} and order size limit:${this.orderSizeLimit}`)
+      this.processInfo.address = address
 
       // create a new progress bar instance and use shades_classic theme
       this.processBar = new cliProgress.SingleBar({
@@ -228,7 +231,7 @@ export default class NFTScan {
       }, cliProgress.Presets.shades_classic);
 
       // Get metadata
-      let getRes = await httpGet(`${baseUrl}?searchValue=${tx}&pageIndex=0&pageSize=1`)
+      let getRes = await httpGet(`${baseUrl}?searchValue=${address}&pageIndex=0&pageSize=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
         return
@@ -247,10 +250,11 @@ export default class NFTScan {
 
       // Process
       this.processNum = 0
+      this.orderQueueInfo.queue = []
       this.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
       this.orderQueueInfo.dirSize = 0
       this.orderQueueInfo.dirNum = 0
-      let urlIter = new UrlIterator(baseUrl, tx, this.orderNumLimit)
+      let urlIter = new UrlIterator(baseUrl, address, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
         await this._doProcess(urls)
@@ -284,7 +288,7 @@ export default class NFTScan {
   }
 
   getRunningTask(): string {
-    return this.processInfo.tx
+    return this.processInfo.address
   }
 
   setOrderNumLimit(limit: number) {
