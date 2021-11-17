@@ -17,7 +17,7 @@ export interface PinResult {
 }
 
 export interface ProcessInfo {
-  tx: string,
+  address: string,
   total: number,
   complete: number,
   remaining: number,
