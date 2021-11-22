@@ -29,7 +29,15 @@ export default class UrlIterator {
       return false
     }
     let metaJson = JSON.parse(getRes.data)
-    return metaJson.data.nftList.length !== 0
+    const nftList = metaJson.data.nftList
+    if (nftList.length === 0){
+      return false
+    }
+    nftList.forEach((e: any) => {
+      this.preUrls.push(e.cover)
+    })
+    this.pageIndex++
+    return true
   }
 
   async nextUrls(): Promise<string[]> {

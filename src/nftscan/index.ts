@@ -132,55 +132,64 @@ export default class NFTScan {
           https.get(url, {timeout: httpTimeout}, async function(res: any) {
             const { statusCode } = res
             const fileName = path.basename(url)
+            let writeRes = false
             if (statusCode === 200 ) {
               let recvData: Buffer = Buffer.alloc(0)
               res.on('data', (d: any) => {
                 recvData = Buffer.concat([recvData, d], recvData.length + d.length)
               })
-              await new Promise((resolveInner, rejectInner) => {
-                res.on('end', () => {
-                  lock.acquire(downloadLock, async function() {
-                    let recvSize = recvData.length
-                    // Check size limit
-                    if (that.orderQueueInfo.dirSize + recvSize > that.orderSizeLimit) {
-                      that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                      that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                      that.orderQueueInfo.dirSize = 0
-                      that.orderQueueInfo.dirNum = 0
-                    }
-                    // Push file
-                    fs.writeFileSync(`${that.orderQueueInfo.dir}/${fileName}`, recvData)
-                    that.orderQueueInfo.dirSize += recvSize
-                    that.orderQueueInfo.dirNum++
-                    // Check number limit
-                    if (that.orderQueueInfo.dirNum >= that.orderNumLimit) {
-                      that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                      that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                      that.orderQueueInfo.dirSize = 0
-                      that.orderQueueInfo.dirNum = 0
-                    }
-                    resolveInner(recvSize)
-                  }).catch(function(e: any) {
-                    rejectInner(e)
-                    console.error(`Lock acquire failed, error message:${e.message}`)
+              try {
+                writeRes = await new Promise((resolveInner, rejectInner) => {
+                  res.on('end', () => {
+                    lock.acquire(downloadLock, async function() {
+                      let recvSize = recvData.length
+                      // Check size limit
+                      if (that.orderQueueInfo.dirSize + recvSize > that.orderSizeLimit) {
+                        that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
+                        that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
+                        that.orderQueueInfo.dirSize = 0
+                        that.orderQueueInfo.dirNum = 0
+                      }
+                      // Push file
+                      fs.writeFileSync(`${that.orderQueueInfo.dir}/${fileName}`, recvData)
+                      that.orderQueueInfo.dirSize += recvSize
+                      that.orderQueueInfo.dirNum++
+                      // Check number limit
+                      if (that.orderQueueInfo.dirNum >= that.orderNumLimit) {
+                        that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
+                        that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
+                        that.orderQueueInfo.dirSize = 0
+                        that.orderQueueInfo.dirNum = 0
+                      }
+                      resolveInner(true)
+                    }).catch(function(e: any) {
+                      rejectInner(false)
+                      console.error(`\nLock acquire failed, error message:${e.message}`)
+                    })
                   })
                 })
-              })
-              resolve(res)
-            } else {
-              reject(res)
+              } catch (e: any) {
+                console.log(`\nWrite file failed, error message:${e.message}`)
+              }
             }
-            that.refreshProgress(fileName)
+            if (writeRes) {
+              that.refreshProgress(fileName)
+              resolve(true)
+            } else {
+              _urls.push(url)
+              reject(false)
+            }
           }).on('error', (e: any) => {
-            console.error(`\nDownload failed, will retry later, error message:${e.message}`)
+            console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
             _urls.push(url)
-            reject(e)
+            reject(false)
           })
         }).catch((e: any) => {
-          // Deal with error
+          //console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
+          _urls.push(url)
         }))
       }
-      for (const p of promises) { await p }
+      await Promise.all(promises).then((value: any) => {})
       await this.addAndOrder()
     }
     Array.prototype.push.apply(this.failedUrls, _urls)
@@ -265,11 +274,13 @@ export default class NFTScan {
 
       this.chain.disconnect()
 
-      console.log('=> Deal complete')
     } catch(e: any) {
       console.error(e.message)
     } finally {
       console.log(`total:${this.processInfo.total}, success:${this.processInfo.complete}, failed:${this.processInfo.remaining}`)
+      console.log(`failed urls:${this.failedUrls}`)
+      console.log('=> Deal complete')
+      this.failedUrls = []
       this.cleanTmpDirs()
       this.initProcessInfo()
       this.initOrderParameters()
