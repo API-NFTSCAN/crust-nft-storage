@@ -1,5 +1,5 @@
 import UrlIterator from '../utils/urlIterator';
-import { httpGet, sleep } from '../utils/utils';
+import { httpGet, sleep, getDirFileNum } from '../utils/utils';
 import { OrderQueueInfo, ProcessInfo } from '../types/types';
 import Chain from '../chain';
 import Ipfs from '../ipfs';
@@ -45,7 +45,8 @@ export default class NFTScan {
       queue: [],
       dir: '',
       dirSize: 0,
-      dirNum: 0
+      dirNum: 0,
+      retryMap: new Map<string, boolean>()
     }
     this.ipfs = new Ipfs()
     this.chain = new Chain()
@@ -86,7 +87,6 @@ export default class NFTScan {
   private async addAndOrder() {
     // Order files on crust network
     if (this.orderQueueInfo.queue.length > 0) {
-      console.log(`\n=> start to order`)
       try {
         for (const dir of this.orderQueueInfo.queue) {
           const pinRes = await this.ipfs.pin(dir)
@@ -94,15 +94,21 @@ export default class NFTScan {
           if (status) {
             const { cid } = pinRes
             const { size, num } = pinRes.data
-            console.log(`=> Ordering cid:${cid}, size:${size} file number:${num}`)
+            console.log(`\n=> Ordering cid:${cid}, size:${size} file number:${num}`)
             const orderRes = await this.chain.order(cid, size)
             if (orderRes) {
               this.processInfo.completeOrder.push(cid)
               this.orderQueueInfo.queue.shift()
               console.log(`=> Order successfully`)
             } else {
+              const fileNum = await getDirFileNum(dir)
+              this.DecProgress(fileNum)
               console.error(`=> Order failed`)
             }
+          } else {
+            const fileNum = await getDirFileNum(dir)
+            this.DecProgress(fileNum)
+            console.error(`IPFS pin add dir:'${dir}' failed, please check IPFS`)
           }
           fs.rmSync(dir, { recursive: true, force: true })
         }
@@ -112,78 +118,21 @@ export default class NFTScan {
     }
   }
 
+  private DecProgress(progress: number) {
+    this.processNum = this.processNum - progress
+    if (this.processNum < 0) {
+      this.processNum = 0
+    }
+    this.processBar.update(this.processNum);
+    this.processInfo.complete = this.processNum
+    this.processInfo.remaining = this.processInfo.total - this.processNum
+  }
+
   private refreshProgress(fileName: string) {
     this.processNum++
     this.processBar.update(this.processNum, {filename: fileName});
     this.processInfo.complete = this.processNum
     this.processInfo.remaining = this.processInfo.total - this.processNum
-  }
-
-  private async _doProcess(urls: string[]) {
-    const that = this
-    let _urls = [...urls]
-    let tryout = (_urls.length / maxDownloadNum + 1) * 2
-    while (_urls.length > 0 && tryout-- > 0) {
-      const len = Math.min(maxDownloadNum, _urls.length)
-      const tmpUrls = _urls.splice(0, len)
-      let promises = []
-      for (const url of tmpUrls) {
-        promises.push(new Promise((resolve, reject) => {
-          https.get(url, {timeout: httpTimeout}, async function(res: any) {
-            const { statusCode } = res
-            const fileName = path.basename(url)
-            if (statusCode === 200 ) {
-              let recvData: Buffer = Buffer.alloc(0)
-              res.on('data', (d: any) => {
-                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
-              })
-              await new Promise((resolveInner, rejectInner) => {
-                res.on('end', () => {
-                  lock.acquire(downloadLock, async function() {
-                    let recvSize = recvData.length
-                    // Check size limit
-                    if (that.orderQueueInfo.dirSize + recvSize > that.orderSizeLimit) {
-                      that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                      that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                      that.orderQueueInfo.dirSize = 0
-                      that.orderQueueInfo.dirNum = 0
-                    }
-                    // Push file
-                    fs.writeFileSync(`${that.orderQueueInfo.dir}/${fileName}`, recvData)
-                    that.orderQueueInfo.dirSize += recvSize
-                    that.orderQueueInfo.dirNum++
-                    // Check number limit
-                    if (that.orderQueueInfo.dirNum >= that.orderNumLimit) {
-                      that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                      that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                      that.orderQueueInfo.dirSize = 0
-                      that.orderQueueInfo.dirNum = 0
-                    }
-                    resolveInner(recvSize)
-                  }).catch(function(e: any) {
-                    rejectInner(e)
-                    console.error(`Lock acquire failed, error message:${e.message}`)
-                  })
-                })
-              })
-              resolve(res)
-            } else {
-              reject(res)
-            }
-            that.refreshProgress(fileName)
-          }).on('error', (e: any) => {
-            console.error(`\nDownload failed, will retry later, error message:${e.message}`)
-            _urls.push(url)
-            reject(e)
-          })
-        }).catch((e: any) => {
-          // Deal with error
-        }))
-      }
-      for (const p of promises) { await p }
-      await this.addAndOrder()
-    }
-    Array.prototype.push.apply(this.failedUrls, _urls)
   }
 
   private cleanTmpDirs() {
@@ -200,7 +149,6 @@ export default class NFTScan {
   private async dealWithRest() {
     // Try failed urls again
     const promises = await this._doProcess(this.failedUrls)
-    this.failedUrls = []
 
     // Deal with left directory
     await new Promise((resolve, reject) => {
@@ -217,6 +165,95 @@ export default class NFTScan {
         }
       })
     }).catch((e: any) => {})
+  }
+
+  private async _doProcess(urls: string[]) {
+    const that = this
+    let tryout = (urls.length / maxDownloadNum + 1) * 2
+    while (urls.length > 0 && tryout-- > 0) {
+      const len = Math.min(maxDownloadNum, urls.length)
+      const tmpUrls = urls.splice(0, len)
+      let promises = []
+      let successArray: number[] = []
+      for (let i = 0; i < tmpUrls.length; i++) {
+        const url = tmpUrls[i]
+        promises.push(new Promise((resolve, reject) => {
+          https.get(url, {timeout : httpTimeout}, async function(res: any) {
+            const { statusCode } = res
+            const fileName = path.basename(url)
+            if (statusCode === 200) {
+              let recvData: Buffer = Buffer.alloc(0)
+              res.on('data', (d: any) => {
+                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
+              })
+              try {
+                await new Promise((resolveInner, rejectInner) => {
+                  res.on('end', () => {
+                    lock.acquire(downloadLock, async function() {
+                      const getSuccess = that.orderQueueInfo.retryMap.get(url)
+                      if (getSuccess === undefined || !getSuccess) {
+                        let recvSize = recvData.length
+                        // Check size limit
+                        if (that.orderQueueInfo.dirSize + recvSize > that.orderSizeLimit) {
+                          that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
+                          that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
+                          that.orderQueueInfo.dirSize = 0
+                          that.orderQueueInfo.dirNum = 0
+                        }
+                        // Push file
+                        fs.writeFileSync(`${that.orderQueueInfo.dir}/${fileName}`, recvData)
+                        that.orderQueueInfo.dirSize += recvSize
+                        that.orderQueueInfo.dirNum++
+                        // Check number limit
+                        if (that.orderQueueInfo.dirNum >= that.orderNumLimit) {
+                          that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
+                          that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
+                          that.orderQueueInfo.dirSize = 0
+                          that.orderQueueInfo.dirNum = 0
+                        }
+                        that.refreshProgress(fileName)
+                        if (getSuccess !== undefined) {
+                          that.orderQueueInfo.retryMap.set(url, true)
+                        }
+                      }
+                      successArray.push(i)
+                      resolveInner(true)
+                    }).catch(function(e: any) {
+                      console.error(`\nLock acquire failed, error message:${e.message}`)
+                      rejectInner(false)
+                    })
+                  })
+                })
+              } catch (e: any) {
+                console.log(`\nWrite file failed, error message:${e.message}`)
+              }
+            }
+            resolve(true)
+          }).setTimeout(httpTimeout, () => {
+            reject(false)
+          }).on('error', (e: any) => {
+            //console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
+            reject(false)
+          })
+        }).catch((e: any) => {
+          //console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
+        }))
+      }
+      await Promise.all(promises).then((value: any) => {})
+      await this.addAndOrder()
+      if (successArray.length != tmpUrls.length) {
+        successArray.sort((a, b) => b - a).forEach(e => {
+          tmpUrls.splice(e, 1)
+        })
+        Array.prototype.push.apply(urls, tmpUrls)
+        tmpUrls.forEach(e => {
+          if (!this.orderQueueInfo.retryMap.has(e)) {
+            this.orderQueueInfo.retryMap.set(e, false)
+          }
+        })
+      }
+    }
+    Array.prototype.push.apply(this.failedUrls, urls)
   }
 
   async doProcess(address: string) {
@@ -254,6 +291,7 @@ export default class NFTScan {
       this.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
       this.orderQueueInfo.dirSize = 0
       this.orderQueueInfo.dirNum = 0
+      this.orderQueueInfo.retryMap = new Map<string, boolean>()
       let urlIter = new UrlIterator(baseUrl, address, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
@@ -265,11 +303,12 @@ export default class NFTScan {
 
       this.chain.disconnect()
 
-      console.log('=> Deal complete')
     } catch(e: any) {
       console.error(e.message)
     } finally {
       console.log(`total:${this.processInfo.total}, success:${this.processInfo.complete}, failed:${this.processInfo.remaining}`)
+      console.log('=> Deal complete')
+      this.failedUrls = []
       this.cleanTmpDirs()
       this.initProcessInfo()
       this.initOrderParameters()

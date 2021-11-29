@@ -5,8 +5,26 @@ import { typesBundleForPolkadot } from '@crustio/type-definitions';
 import { HttpGetRes } from '../types/types';
 import { chainAddr, httpTimeout } from '../consts';
 import https from 'https';
+import fs from 'fs';
 
 /* PUBLIC METHODS */
+/**
+ * getDirFileNum
+ * @param {string} dir 
+ * @returns number
+ */
+export function getDirFileNum(dir: string): Promise<number> {
+  return new Promise(resolve => {
+    fs.readdir(dir, (err, data) => {
+      if (err) {
+        resolve(0)
+      } else {
+        resolve(data.length)
+      }
+    })
+  })
+}
+
 /**
  * isNumeric
  * @param {string} str 
@@ -32,7 +50,7 @@ export function sleep(microsec: number) {
  */
 export function httpGet(url: string): Promise<HttpGetRes> {
   return new Promise((resolve, reject) => {
-    https.get(url, {timeout: httpTimeout}, function(res: any) {
+    https.get(url, {timeout : httpTimeout}, function(res: any) {
       const { statusCode } = res
       let tmpData: string = ''
       if (statusCode === 200 ) {
@@ -50,6 +68,10 @@ export function httpGet(url: string): Promise<HttpGetRes> {
           status: false,
         })
       }
+    }).setTimeout(httpTimeout, () => {
+      reject({
+        status: false
+      })
     }).on('error', (e: any) => {
       reject({ 
         status: false,

@@ -28,5 +28,6 @@ export interface OrderQueueInfo {
   queue: string[],
   dir: string,
   dirSize: number,
-  dirNum: number
+  dirNum: number,
+  retryMap: Map<string, boolean>
 }
