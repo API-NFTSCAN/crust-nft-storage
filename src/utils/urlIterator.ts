@@ -1,7 +1,5 @@
 import { httpGet } from './utils';
 
-export const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
-
 export default class UrlIterator {
   private preUrls: string[];
   private url: string;
@@ -22,7 +20,7 @@ export default class UrlIterator {
     if (this.preUrls.length !== 0 ) {
       return true
     }
-    const reqUrl = `${baseUrl}?searchValue=${this.address}&pageIndex=${this.pageIndex}&pageSize=${this.pageSizeLimit}`
+    const reqUrl = `${this.url}?searchValue=${this.address}&pageIndex=${this.pageIndex}&pageSize=${this.pageSizeLimit}`
     const getRes = await httpGet(reqUrl)
     if (!getRes.status) {
       console.error(`Request ${reqUrl} failed`)
@@ -43,7 +41,7 @@ export default class UrlIterator {
   async nextUrls(): Promise<string[]> {
     let nftUrls = this.preUrls.splice(0, this.pageSize)
     while (nftUrls.length < this.pageSize) {
-      const reqUrl = `${baseUrl}?searchValue=${this.address}&pageIndex=${this.pageIndex}&pageSize=${this.pageSizeLimit}`
+      const reqUrl = `${this.url}?searchValue=${this.address}&pageIndex=${this.pageIndex}&pageSize=${this.pageSizeLimit}`
       const getRes = await httpGet(reqUrl)
       if (!getRes.status) {
         console.error(`Request ${reqUrl} failed`)
