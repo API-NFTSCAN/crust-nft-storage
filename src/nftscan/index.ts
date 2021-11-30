@@ -1,4 +1,4 @@
-import UrlIterator from '../utils/urlIterator';
+import NFTIterator from '../utils/nftIterator';
 import { httpGet, sleep, getDirFileNum } from '../utils/utils';
 import { OrderQueueInfo, ProcessInfo } from '../types/types';
 import Chain from '../chain';
@@ -291,7 +291,7 @@ export default class NFTScan {
       this.orderQueueInfo.dirSize = 0
       this.orderQueueInfo.dirNum = 0
       this.orderQueueInfo.retryMap = new Map<string, boolean>()
-      let urlIter = new UrlIterator(NFTListUrl, address, this.orderNumLimit)
+      let urlIter = new NFTIterator(NFTListUrl, address, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
         await this._doProcess(urls)
