@@ -1,4 +1,4 @@
-import UrlIterator from '../utils/urlIterator';
+import NFTIterator from '../utils/nftIterator';
 import { httpGet, sleep, getDirFileNum } from '../utils/utils';
 import { OrderQueueInfo, ProcessInfo } from '../types/types';
 import Chain from '../chain';
@@ -7,7 +7,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { mkdtemp } from 'fs/promises';
-import { httpTimeout } from '../consts';
+import { httpTimeout, NFTListUrl } from '../consts';
 import _colors from 'colors';
 
 const AsyncLock = require('async-lock')
@@ -16,7 +16,6 @@ const { SingleBar } = require('cli-progress')
 
 const lock = new AsyncLock()
 const downloadLock = 'downloadLock'
-const baseUrl = 'https://nftscan.com/nftscan/nftSearch'
 const storePrefix = 'nft-'
 const maxDownloadNum = 50
 
@@ -268,7 +267,7 @@ export default class NFTScan {
       }, cliProgress.Presets.shades_classic);
 
       // Get metadata
-      let getRes = await httpGet(`${baseUrl}?searchValue=${address}&pageIndex=0&pageSize=1`)
+      let getRes = await httpGet(`${NFTListUrl}?searchValue=${address}&pageIndex=0&pageSize=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
         return
@@ -292,7 +291,7 @@ export default class NFTScan {
       this.orderQueueInfo.dirSize = 0
       this.orderQueueInfo.dirNum = 0
       this.orderQueueInfo.retryMap = new Map<string, boolean>()
-      let urlIter = new UrlIterator(baseUrl, address, this.orderNumLimit)
+      let urlIter = new NFTIterator(NFTListUrl, address, this.orderNumLimit)
       while(await urlIter.hasNext()) {
         const urls = await urlIter.nextUrls()
         await this._doProcess(urls)
