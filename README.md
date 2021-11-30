@@ -17,7 +17,7 @@ sudo docker-compose -f docker/watch-chain.yaml up -d
 to start a watcher for order and wait for chain synchronization complete. You can use '***sudo docker logs crust-watch -f***' to see syncing progress
 
 ### Bootstrap configure 
-a ***.env*** file needs to be created in the project root directory, a sample ***.env*** file shows as follow:
+***.env*** file needs to be created in the project root directory, a sample ***.env*** file shows as follow:
 ```
 CRUST_SEEDS="xxxxxxxx"
 CHAIN_ADDR="ws://localhost:19933"

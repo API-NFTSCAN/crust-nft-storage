@@ -1,11 +1,19 @@
 import NFTScan from './nftscan';
 import { orderSizeDefault, orderNumDefault } from './nftscan';
-import { port } from './consts'
+import { port, chainAddr, NFTListUrl } from './consts'
 import { checkReplica, isNumeric } from './utils/utils'
 
 const http = require('http');
 
 async function main() {
+  const config = {
+    chainAddress: chainAddr,
+    nftListUrl: NFTListUrl,
+    port: port
+  }
+  console.log('Config:')
+  console.log(config)
+
   const ni = new NFTScan()
   await ni.init();
 
