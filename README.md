@@ -50,7 +50,7 @@ yarn build && yarn start
 ### '/process' API
 
 ```
-curl -XPOST 'http://localhost:<port>/api/v0/process?address=xxx&orderNumLimit=xxx&orderSizeLimit=xxx'
+curl -XPOST 'http://localhost:<port>/api/v0/process?address=xxx&orderNumLimit=xxx'
 ```
 
 #### Description
@@ -59,7 +59,6 @@ Order nfts
 #### Parameter
 1. address [string]: required, transaction hash
 1. orderNumLimit [number]: optional, max total file number limit per order, default is 500
-1. orderSizeLimit [number]: optional, max total file size limit per order, default is 5 * 1024 * 1024 (5GB), max value is 10GB
 
 #### Output
 ```
