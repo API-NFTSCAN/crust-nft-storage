@@ -2,10 +2,12 @@ import { SubmittableExtrinsic } from '@polkadot/api/promise/types';
 import { Keyring } from '@polkadot/keyring';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { typesBundleForPolkadot } from '@crustio/type-definitions';
-import { HttpGetRes } from '../types/types';
-import { chainAddr, httpTimeout } from '../consts';
+import { HttpRes } from '../types/types';
+import { CHAIN_ADDR, HTTP_TIMEOUT } from '../consts';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
+const request = require('request');
 
 /* PUBLIC METHODS */
 /**
@@ -48,35 +50,69 @@ export function sleep(microsec: number) {
  * @param {string} url 
  * @returns promise
  */
-export function httpGet(url: string): Promise<HttpGetRes> {
+export function httpGet(url: string): Promise<HttpRes> {
   return new Promise((resolve, reject) => {
-    https.get(url, {timeout : httpTimeout}, function(res: any) {
-      const { statusCode } = res
-      let tmpData: string = ''
-      if (statusCode === 200 ) {
-        res.on('data', (d: string) => {
-          tmpData += d
-        })
-        res.on('end', () => {
-          resolve({
-            status: true,
-            data: tmpData
+    try {
+      request.get(url, {timeout : HTTP_TIMEOUT}, function(err: any, res: any, body: any) {
+        if (err !== null) {
+          reject({ 
+            status: false,
           })
-        })
-      } else {
-        reject({ 
-          status: false,
-        })
-      }
-    }).setTimeout(httpTimeout, () => {
-      reject({
-        status: false
+        } else {
+          const { statusCode } = res
+          if (statusCode === 200 ) {
+            resolve({
+              status: true,
+              data: body
+            })
+          } else {
+            reject({ 
+              status: false,
+            })
+          }
+        }
       })
-    }).on('error', (e: any) => {
+    } catch (e) {
       reject({ 
         status: false,
       })
-    })
+    }
+  });
+}
+
+/**
+ * sleep
+ * @param {string} url 
+ * @returns promise
+ */
+export function httpPost(url: string): Promise<HttpRes> {
+  return new Promise((resolve, reject) => {
+    try {
+      request.post(url, {timeout : HTTP_TIMEOUT}, function(err: any, res: any, body: any) {
+        if (err !== null) {
+          reject({
+            status: false,
+          })
+        } else {
+          let bodyJson = JSON.parse(body)
+          const { code } = bodyJson
+          if (code === 200 ) {
+            resolve({
+              status: true,
+              data: body
+            })
+          } else {
+            reject({ 
+              status: false,
+            })
+          }
+        }
+      })
+    } catch (e) {
+      reject({ 
+        status: false,
+      })
+    }
   });
 }
 
@@ -110,47 +146,52 @@ export function checkSeeds(seeds: string) {
  */
 export async function sendTx(tx: SubmittableExtrinsic, seeds: string) {
   // 1. Load keyring
-  console.log('⛓  Sending tx to chain...');
+  //console.log('⛓  Sending tx to chain...');
   const krp = loadKeyringPair(seeds);
     
   // 2. Send tx to chain
   return new Promise((resolve, reject) => {
     tx.signAndSend(krp, ({events = [], status}) => {
-          console.log(
-              `  ↪ 💸  Transaction status: ${status.type}, nonce: ${tx.nonce}`
-          );
+      //console.log(
+      //    `  ↪ 💸  Transaction status: ${status.type}, nonce: ${tx.nonce}`
+      //);
 
-          if (
-              status.isInvalid ||
-              status.isDropped ||
-              status.isUsurped ||
-              status.isRetracted
-          ) {
-              reject(new Error('Invalid transaction'));
-          } else {
-              // Pass it
-          }
+      if (
+        status.isInvalid ||
+        status.isDropped ||
+        status.isUsurped ||
+        status.isRetracted
+      ) {
+        reject(new Error('Invalid transaction'));
+      } else {
+        // Pass it
+      }
 
-          if (status.isInBlock) {
-              events.forEach(({event: {method, section}}) => {
-              if (section === 'system' && method === 'ExtrinsicFailed') {
-                  // Error with no detail, just return error
-                  console.error('  ↪ ❌  Send transaction failed');
-                  resolve(false);
-              } else if (method === 'ExtrinsicSuccess') {
-                  console.log('  ↪ ✅  Send transaction success.');
-                  resolve(true);
-              }
-              });
-          } else {
-              // Pass it
+      if (status.isInBlock) {
+        events.forEach(({event: {method, section}}) => {
+          if (section === 'system' && method === 'ExtrinsicFailed') {
+            // Error with no detail, just return error
+            //console.error('  ↪ ❌  Send transaction failed');
+            resolve(false);
+          } else if (method === 'ExtrinsicSuccess') {
+            //console.log('  ↪ ✅  Send transaction success.');
+            resolve(true);
           }
-      }).catch((e: any) => {
-          reject(e);
-      });
-  });
+        });
+      } else {
+        // Pass it
+      }
+    }).catch((e: any) => {
+      reject(e);
+    });
+  }).catch((e: any) => {});
 }
 
+/**
+ * Get nft replica
+ * @param {string} cid IPFS content id 
+ * @returns number
+ */
 export async function checkReplica(cid: string) {
   let fileReplica = 0
   // Check cid
@@ -160,7 +201,7 @@ export async function checkReplica(cid: string) {
 
   // Try to connect to Crust Chain
   const chain = new ApiPromise({
-    provider: new WsProvider(chainAddr),
+    provider: new WsProvider(CHAIN_ADDR),
     typesBundle: typesBundleForPolkadot
   });
 
@@ -177,6 +218,16 @@ export async function checkReplica(cid: string) {
   await chain.disconnect();
 
   return fileReplica
+}
+
+/**
+ * Pad number with zero
+ * @param {number} nr padded number 
+ * @param {number} n total length 
+ * @returns string
+ */
+export function padLeftZero(nr: number, n: number){
+  return Array(n-String(nr).length+1).join('0')+nr;
 }
 
 /* PRIVATE METHODS  */

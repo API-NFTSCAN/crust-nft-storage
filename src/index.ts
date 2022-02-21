@@ -1,15 +1,24 @@
 import NFTScan from './nftscan';
 import { orderSizeDefault, orderNumDefault } from './nftscan';
-import { port, chainAddr, NFTListUrl } from './consts'
+import {
+  SERVER_PORT,
+  CHAIN_ADDR,
+  NFT_LIST_URL,
+  NFT_UPDATETOKENURI_URL,
+  NFT_UPDATESTATUS_URL,
+  IPFS_HOMEDIR } from './consts'
 import { checkReplica, isNumeric } from './utils/utils'
 
 const http = require('http');
 
 async function main() {
   const config = {
-    chainAddress: chainAddr,
-    nftListUrl: NFTListUrl,
-    port: port
+    chainAddress: CHAIN_ADDR,
+    nftListUrl: NFT_LIST_URL,
+    nftUpdateTokenUriUrl: NFT_UPDATETOKENURI_URL,
+    nftUpdateStatusUrl: NFT_UPDATESTATUS_URL,
+    ipfsHomeDir: IPFS_HOMEDIR,
+    port: SERVER_PORT
   }
   console.log('Config:')
   console.log(config)
@@ -100,6 +109,14 @@ async function main() {
           resMsg = 'illegal parameter, need parameter:cid'
           resCode = 500
         }
+      } else if ('/stop' === route) {
+        const result = ni.stopTask()
+        if (result) {
+          resMsg = 'Task will be exited'
+        } else {
+          resMsg = 'No task is running'
+        }
+        resCode = 200
       } else {
         resMsg = `unknown request:${url.pathname}`
         resCode = 404
@@ -115,8 +132,8 @@ async function main() {
     res.end(JSON.stringify(resBody));
   });
 
-  server.listen(port);
-  console.log(`Start server on port:${port} successfully`)
+  server.listen(SERVER_PORT);
+  console.log(`Start server on port:${SERVER_PORT} successfully`)
 }
 
 main()

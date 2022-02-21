@@ -20,19 +20,29 @@ to start a watcher for order and wait for chain synchronization complete. You ca
 ***.env*** file needs to be created in the project root directory, a sample ***.env*** file shows as follow:
 ```
 CRUST_SEEDS="xxxxxxxx"
-CHAIN_ADDR="ws://localhost:19933"
-NFT_LIST_URL="https://nftscan.com/nftscan/nftSearch"
+CHAIN_ADDR="ws://localhost:19944"
+NFT_LIST_URL="http://<xxx>/ipfs/getNftList"
+NFT_UPDATETOKENURI_URL="http://<xxx>/ipfs/updateTokenUri"
+NFT_UPDATESTATUS_URL="http://<xxx>/ipfs/updateStatus"
+NFT_DOWNLOAD_TIMEOUT=180000
+IPFS_TIMEOUT="120s"
+IPFS_HOMEDIR="/tmp/crust/.ipfs"
 SERVER_PORT=8765
 ```
 
-1. CRUST_SEEDS: Crust network account seeds
-1. CHAIN_ADDR: Crust network address, you can use the watcher started in previous step which is '***ws://localhost:19933***'
-1. NFT_LIST_URL: used to get NFTs
-1. SERVER_PORT: server listen port
+1. CRUST_SEEDS: required, Crust network account seeds
+1. CHAIN_ADDR: required, Crust network address, you can use the watcher started in previous step which is '***ws://localhost:19944***'
+1. NFT_LIST_URL: required, get NFTs
+1. NFT_UPDATETOKENURI_URL: required, update nft token uri
+1. NFT_UPDATESTATUS_URL: required, update nft address status
+1. NFT_DOWNLOAD_TIMEOUT: optional, nft download timeout, default is 180s
+1. IPFS_TIMEOUT: optional, ipfs operation timeout, default is 120s
+1. IPFS_HOMEDIR: required, ipfs home directory
+1. SERVER_PORT: required, server listen port, default is 8765
 
 ### Start service
 ```
-yarn && yarn start
+yarn build && yarn start
 ```
 
 ## APIs
@@ -101,5 +111,22 @@ Get indicated order's replica through Crust network
 {
     "cid": "xxx",
     "replica": 100
+}
+```
+
+### '/stop' API
+
+```
+curl -XGET 'http://localhost:<port>/api/v0/stop'
+```
+
+#### Description
+Stop current task
+
+#### Output
+```
+{
+    "statusCode": "xxx",
+    "message": "xxx"
 }
 ```
