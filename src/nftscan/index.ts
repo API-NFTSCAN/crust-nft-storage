@@ -1,21 +1,28 @@
 import NFTIterator from '../utils/nftIterator';
-import { httpGet, sleep, getDirFileNum } from '../utils/utils';
-import { OrderQueueInfo, ProcessInfo } from '../types/types';
+import { httpPost, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
+import { CidProcessInfo, ProcessInfo, NFTItemInfo } from '../types/types';
 import Chain from '../chain';
 import Ipfs from '../ipfs';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { mkdtemp } from 'fs/promises';
-import { httpTimeout, NFTListUrl } from '../consts';
+import {
+  NFT_LIST_URL,
+  NFT_UPDATETOKENURI_URL,
+  NFT_UPDATESTATUS_URL,
+  NFT_DOWNLOAD_TIMEOUT } from '../consts';
 import _colors from 'colors';
+import { CID } from 'multiformats/cid';
 
 const AsyncLock = require('async-lock')
 const cliProgress = require('cli-progress')
 const { SingleBar } = require('cli-progress')
+require('events').EventEmitter.defaultMaxListeners = 100;
 
 const lock = new AsyncLock()
-const downloadLock = 'downloadLock'
+const ipfsLock = 'ipfsLock'
+const orderLock = 'orderLock'
 const storePrefix = 'nft-'
 const maxDownloadNum = 50
 
@@ -30,42 +37,41 @@ export default class NFTScan {
   private processInfo: ProcessInfo
   private processBar: typeof SingleBar
   private processNum: number
-  private failedUrls: string[]
-  private orderQueueInfo: OrderQueueInfo
+  private failedItems: NFTItemInfo[]
+  private cidProcessInfo: CidProcessInfo
   private orderSizeLimit: number
   private orderNumLimit: number
+  private stop: boolean
 
   constructor() {
-    // queue: directories ready for order
-    // dir: being processed directory
-    // dirSize: total size of dir
-    // dirNum: total file number of dir
-    this.orderQueueInfo = {
-      queue: [],
-      dir: '',
-      dirSize: 0,
-      dirNum: 0,
-      retryMap: new Map<string, boolean>()
-    }
     this.ipfs = new Ipfs()
     this.chain = new Chain()
-    this.processInfo = {
-      address: '',
-      total: 0,
-      complete: 0,
-      remaining: 0,
-      completeOrder: []
-    }
+
+    // Initialize private data
+    this.cidProcessInfo = {} as CidProcessInfo
+    this.processInfo = {} as ProcessInfo
+
     this.orderNumLimit = orderNumDefault
     this.orderSizeLimit = orderSizeDefault
     this.processBar = {}
     this.processNum = 0
-    this.failedUrls = []
+    this.failedItems = []
+    this.stop = false
   }
 
   async init() {
     // Start IPFS
     await this.ipfs.startIPFS()
+
+    this.initProcessInfo()
+  }
+
+  private async initCidInfo() {
+    const root = await this.ipfs.objectNew()
+    this.cidProcessInfo = {
+      root: root,
+      cidNum: 0
+    }
   }
 
   private initProcessInfo() {
@@ -73,6 +79,7 @@ export default class NFTScan {
       address: '',
       total: 0,
       complete: 0,
+      success: 0,
       remaining: 0,
       completeOrder: []
     }
@@ -83,176 +90,11 @@ export default class NFTScan {
     this.orderSizeLimit = orderSizeDefault
   }
 
-  private async addAndOrder() {
-    // Order files on crust network
-    if (this.orderQueueInfo.queue.length > 0) {
-      try {
-        for (const dir of this.orderQueueInfo.queue) {
-          const pinRes = await this.ipfs.pin(dir)
-          const { status } = pinRes
-          if (status) {
-            const { cid } = pinRes
-            const { size, num } = pinRes.data
-            console.log(`\n=> Ordering cid:${cid}, size:${size} file number:${num}`)
-            const orderRes = await this.chain.order(cid, size)
-            if (orderRes) {
-              this.processInfo.completeOrder.push(cid)
-              this.orderQueueInfo.queue.shift()
-              console.log(`=> Order successfully`)
-            } else {
-              const fileNum = await getDirFileNum(dir)
-              this.DecProgress(fileNum)
-              console.error(`=> Order failed`)
-            }
-          } else {
-            const fileNum = await getDirFileNum(dir)
-            this.DecProgress(fileNum)
-            console.error(`IPFS pin add dir:'${dir}' failed, please check IPFS`)
-          }
-          fs.rmSync(dir, { recursive: true, force: true })
-        }
-      } catch(e: any) {
-        console.error(`Unexpected error occur, error message:${e.message}`)
-      }
-    }
-  }
-
-  private DecProgress(progress: number) {
-    this.processNum = this.processNum - progress
-    if (this.processNum < 0) {
-      this.processNum = 0
-    }
-    this.processBar.update(this.processNum);
-    this.processInfo.complete = this.processNum
-    this.processInfo.remaining = this.processInfo.total - this.processNum
-  }
-
   private refreshProgress(fileName: string) {
     this.processNum++
     this.processBar.update(this.processNum, {filename: fileName});
     this.processInfo.complete = this.processNum
     this.processInfo.remaining = this.processInfo.total - this.processNum
-  }
-
-  private cleanTmpDirs() {
-    for (const dir of this.orderQueueInfo.queue) {
-      fs.rmSync(dir, { recursive: true, force: true })
-    }
-    this.orderQueueInfo.queue = []
-    if (this.orderQueueInfo.dir !== '') {
-      fs.rmSync(this.orderQueueInfo.dir, { recursive: true, force: true })
-    }
-    this.orderQueueInfo.dir = ''
-  }
-
-  private async dealWithRest() {
-    // Try failed urls again
-    const promises = await this._doProcess(this.failedUrls)
-
-    // Deal with left directory
-    await new Promise((resolve, reject) => {
-      const dir =this.orderQueueInfo.dir
-      fs.readdir(dir, async (err: any, data: any) => {
-        if (!err && data.length !== 0) {
-          this.orderQueueInfo.queue.push(dir)
-          await this.addAndOrder()
-          resolve(data)
-        } else {
-          fs.rmSync(dir, { recursive: true, force: true })
-          this.orderQueueInfo.dir = ''
-          reject(err)
-        }
-      })
-    }).catch((e: any) => {})
-  }
-
-  private async _doProcess(urls: string[]) {
-    const that = this
-    let tryout = (urls.length / maxDownloadNum + 1) * 2
-    while (urls.length > 0 && tryout-- > 0) {
-      const len = Math.min(maxDownloadNum, urls.length)
-      const tmpUrls = urls.splice(0, len)
-      let promises = []
-      let successArray: number[] = []
-      for (let i = 0; i < tmpUrls.length; i++) {
-        const url = tmpUrls[i]
-        promises.push(new Promise((resolve, reject) => {
-          https.get(url, {timeout : httpTimeout}, async function(res: any) {
-            const { statusCode } = res
-            const fileName = path.basename(url)
-            if (statusCode === 200) {
-              let recvData: Buffer = Buffer.alloc(0)
-              res.on('data', (d: any) => {
-                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
-              })
-              try {
-                await new Promise((resolveInner, rejectInner) => {
-                  res.on('end', () => {
-                    lock.acquire(downloadLock, async function() {
-                      const getSuccess = that.orderQueueInfo.retryMap.get(url)
-                      if (getSuccess === undefined || !getSuccess) {
-                        let recvSize = recvData.length
-                        // Check size limit
-                        if (that.orderQueueInfo.dirSize + recvSize > that.orderSizeLimit) {
-                          that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                          that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                          that.orderQueueInfo.dirSize = 0
-                          that.orderQueueInfo.dirNum = 0
-                        }
-                        // Push file
-                        fs.writeFileSync(`${that.orderQueueInfo.dir}/${fileName}`, recvData)
-                        that.orderQueueInfo.dirSize += recvSize
-                        that.orderQueueInfo.dirNum++
-                        // Check number limit
-                        if (that.orderQueueInfo.dirNum >= that.orderNumLimit) {
-                          that.orderQueueInfo.queue.push(that.orderQueueInfo.dir)
-                          that.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-                          that.orderQueueInfo.dirSize = 0
-                          that.orderQueueInfo.dirNum = 0
-                        }
-                        that.refreshProgress(fileName)
-                        if (getSuccess !== undefined) {
-                          that.orderQueueInfo.retryMap.set(url, true)
-                        }
-                      }
-                      successArray.push(i)
-                      resolveInner(true)
-                    }).catch(function(e: any) {
-                      console.error(`\nLock acquire failed, error message:${e.message}`)
-                      rejectInner(false)
-                    })
-                  })
-                })
-              } catch (e: any) {
-                console.log(`\nWrite file failed, error message:${e.message}`)
-              }
-            }
-            resolve(true)
-          }).setTimeout(httpTimeout, () => {
-            reject(false)
-          }).on('error', (e: any) => {
-            //console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
-            reject(false)
-          })
-        }).catch((e: any) => {
-          //console.error(`\nDownload(url:${url}) failed, will retry later, error message:${e.message}`)
-        }))
-      }
-      await Promise.all(promises).then((value: any) => {})
-      await this.addAndOrder()
-      if (successArray.length != tmpUrls.length) {
-        successArray.sort((a, b) => b - a).forEach(e => {
-          tmpUrls.splice(e, 1)
-        })
-        Array.prototype.push.apply(urls, tmpUrls)
-        tmpUrls.forEach(e => {
-          if (!this.orderQueueInfo.retryMap.has(e)) {
-            this.orderQueueInfo.retryMap.set(e, false)
-          }
-        })
-      }
-    }
-    Array.prototype.push.apply(this.failedUrls, urls)
   }
 
   async doProcess(address: string) {
@@ -267,7 +109,7 @@ export default class NFTScan {
       }, cliProgress.Presets.shades_classic);
 
       // Get metadata
-      let getRes = await httpGet(`${NFTListUrl}?searchValue=${address}&pageIndex=0&pageSize=1`)
+      let getRes = await httpPost(`${NFT_LIST_URL}?nft_address=${address}&page_index=1&page_size=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
         return
@@ -281,20 +123,16 @@ export default class NFTScan {
       let nftNum = nftJson.data.total
       this.processBar.start(nftNum, 0);
       this.processInfo.total = nftNum
-      this.processInfo.complete = 0
       this.processInfo.remaining = nftNum
 
       // Process
       this.processNum = 0
-      this.orderQueueInfo.queue = []
-      this.orderQueueInfo.dir = await mkdtemp(`./${storePrefix}`)
-      this.orderQueueInfo.dirSize = 0
-      this.orderQueueInfo.dirNum = 0
-      this.orderQueueInfo.retryMap = new Map<string, boolean>()
-      let urlIter = new NFTIterator(NFTListUrl, address, this.orderNumLimit)
-      while(await urlIter.hasNext()) {
-        const urls = await urlIter.nextUrls()
-        await this._doProcess(urls)
+      await this.initCidInfo()
+
+      let itemIter = new NFTIterator(NFT_LIST_URL, address, this.orderNumLimit)
+      while(await itemIter.hasNext() && !this.stop) {
+        const items = await itemIter.nextUrls()
+        await this._doProcess(items)
       }
 
       // Deal with failed
@@ -305,20 +143,221 @@ export default class NFTScan {
     } catch(e: any) {
       console.error(e.message)
     } finally {
-      console.log(`total:${this.processInfo.total}, success:${this.processInfo.complete}, failed:${this.processInfo.remaining}`)
+      this.processBar.stop()
+      let nftStatus = 0
+      if (this.processInfo.success === 0) {
+        nftStatus = 0
+      } else if (this.processInfo.success === this.processInfo.total) {
+        nftStatus = 1
+      } else if (this.processInfo.success < this.processInfo.total) {
+        nftStatus = 2
+      }
+      let updateRes = await httpPost(`${NFT_UPDATESTATUS_URL}?nft_address=${address}&nft_save_status=${nftStatus}`)
+      if (!updateRes.status) {
+        console.error('Update nft status failed.')
+      }
+      console.log(`=> total:${this.processInfo.total}, success:${this.processInfo.success}, failed:${this.processInfo.total - this.processInfo.success}`)
+      console.log('=> complete orders:')
+      console.log(this.processInfo.completeOrder)
       console.log('=> Deal complete')
-      this.failedUrls = []
-      this.cleanTmpDirs()
+      this.failedItems = []
       this.initProcessInfo()
       this.initOrderParameters()
-      this.processBar.stop();
+      this.stop = false
     }
   }
 
-  async UpdateUpstream() {
-    // TODO: Update nft address with Crust network order id. If you want to get a nft's replica,
+  private async _doProcess(items: NFTItemInfo[]) {
+    let tryout = 3
+    let failedArray: NFTItemInfo[] = []
+    let tasks = []
+    while (true) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        tasks.push(this.getTask(item))
+        if (tasks.length === maxDownloadNum || i === items.length - 1) {
+          await Promise.all(tasks).then((items: any) => {
+            for (const item of items) {
+              if (item !== '')
+                failedArray.push(item)
+            }
+          }).catch((e: any) => {})
+          tasks = []
+        }
+      }
+      if (failedArray.length === 0 || --tryout <= 0) {
+        break
+      }
+      items = failedArray
+      failedArray = []
+    }
+    Array.prototype.push.apply(this.failedItems, failedArray)
+  }
+
+  private getTask(item: NFTItemInfo) {
+    const that = this
+    return new Promise(async (resolve, reject) => {
+      let onRes = false
+      const link = item.link
+      if (link.startsWith("http")) {
+        let recvData: Buffer = Buffer.alloc(0)
+        await new Promise((resolveInner, rejectInner) => {
+          let isTimeout = false
+          const req = https.get(link, { timeout : NFT_DOWNLOAD_TIMEOUT }, async function(res: any) {
+            if (res.statusCode === 200) {
+              res.on('data', (d: any) => {
+                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
+              })
+              res.on('end', async () => {
+                try {
+                  if (res.complete) {
+                    const { cid } = await that.ipfs.add(item.id, recvData)
+                    resolveInner(cid.toString())
+                  } else {
+                    rejectInner()
+                  }
+                } catch (e) {
+                  rejectInner()
+                }
+              })
+            } else {
+              rejectInner()
+            }
+          })
+          req.on('timeout', () => {
+            rejectInner()
+            isTimeout = true
+            req.destroy()
+          })
+          req.on('error', (e: any) => {
+            if (!isTimeout) {
+              rejectInner()
+            }
+          })
+        }).then(async (cid: any) => {
+          onRes = await that.addAndOrder({
+            id: item.id,
+            link: cid as unknown as string
+          })
+        }).catch((e: any) => {
+        })
+      } else if (link.startsWith("Qm")) {
+        onRes = await that.addAndOrder({
+          id: item.id,
+          link: link
+        })
+      } else {
+        that.refreshProgress(link)
+        onRes = true
+      }
+      onRes ? resolve('') : resolve(item)
+    })
+  }
+
+  private async addAndOrder(item: NFTItemInfo) {
+    let res = false
+    try {
+      const that = this
+      const cid = item.link
+      const info = await this.ipfs.objectStat(cid)
+      await lock.acquire(ipfsLock, async function() {
+        that.refreshProgress(cid)
+        const name = padLeftZero(that.cidProcessInfo.cidNum, String(that.orderNumLimit).length) + item.id
+        that.cidProcessInfo.root = await that.ipfs.objectPatchAddLink(that.cidProcessInfo.root, cid, name, info.CumulativeSize)
+        that.cidProcessInfo.cidNum++
+        if (that.cidProcessInfo.cidNum == that.orderNumLimit) {
+          const root = that.cidProcessInfo.root.toString()
+          const { CumulativeSize } = await that.ipfs.objectStat(root)
+          await that.order(root, CumulativeSize, String(that.orderNumLimit).length)
+          that.cidProcessInfo.root = await that.ipfs.objectNew()
+          that.cidProcessInfo.cidNum = 0
+        }
+        res = true
+      }).catch((e: any) => {
+      })
+    } catch (e) {
+    }
+    return res
+  }
+
+  private async order(cid: string, size: number, prefixLen = 0) {
+    const that = this
+    let orderRes = false
+    await lock.acquire(orderLock, async function() {
+      try {
+        const res = await that.chain.order(cid, size)
+        if (res) {
+          that.processInfo.completeOrder.push(cid)
+          let links: NFTItemInfo[] = []
+          for (const file of await that.ipfs.ls(cid)) {
+            links.push({
+              id: file.name.substr(prefixLen),
+              link: file.cid.toString()
+            })
+          }
+          orderRes = true
+          await that.updateUpstream(links, cid)
+        }
+      } catch (e: any) {
+      }
+    }).catch((e: any) => {
+    })
+    return orderRes
+  }
+
+  private async dealWithRest() {
+    try {
+      // Retry failed items
+      if (this.failedItems.length > 0) {
+        await this._doProcess(this.failedItems)
+      }
+
+      // Order left cids
+      if (this.cidProcessInfo.cidNum > 0) {
+        const cid = this.cidProcessInfo.root.toString()
+        const { CumulativeSize } = await this.ipfs.objectStat(cid)
+        await this.order(cid, CumulativeSize)
+      }
+      await sleep(3000)
+    } catch (e: any) {
+      console.error(`Deal with left items failed:${e.message}`)
+    }
+  }
+
+  private async updateUpstream(items: NFTItemInfo[], orderId: string) {
+    // Update nft address with Crust network order id. If you want to get a nft's replica,
     // corresponding order id with this nft should be recorded in NFTScan's database
-    console.log('=> Updating upstream status...')
+    const orgLen = items.length
+    let tasks = []
+    let failedArray: NFTItemInfo[] = []
+    let tryout = 3
+    while (true) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        tasks.push(new Promise(async (resolve, reject) => {
+          let res = await httpPost(`${NFT_UPDATETOKENURI_URL}?nft_address=${this.processInfo.address}&nft_token_id=${item.id}&nft_tokenuri=${item.link}$nft_token_order_id=${orderId}`)
+          res.status ? resolve('') : resolve(item)
+        }).catch((e: any) => {
+          failedArray.push(item)
+        }))
+        if (tasks.length === maxDownloadNum || i === items.length - 1) {
+          await Promise.all(tasks).then((values: any) => {
+            for (const val of values) {
+              if (val !== '') {
+                failedArray.push(val)
+              }
+            }
+          })
+          tasks = []
+        }
+      }
+      if (failedArray.length === 0 || --tryout <= 0) {
+        break
+      }
+      items = failedArray
+      failedArray = []
+    }
+    this.processInfo.success += orgLen - failedArray.length
   }
 
   getProcessInfo(): ProcessInfo {
@@ -351,5 +390,13 @@ export default class NFTScan {
 
   getOrderSizeLimit() {
     return this.orderSizeLimit
+  }
+
+  stopTask() {
+    if (this.processInfo.address !== '') {
+      this.stop = true
+      return true
+    }
+    return false
   }
 }

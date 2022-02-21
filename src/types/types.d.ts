@@ -1,4 +1,5 @@
-export interface HttpGetRes {
+import { CID } from 'multiformats/cid';
+export interface HttpRes {
   status: boolean,
   data: string
 }
@@ -16,18 +17,30 @@ export interface PinResult {
   [data: string]: any
 }
 
+export interface IpfsObjectInfo {
+  Hash?: CID,
+  NumLinks?: number,
+  BlockSize?: number,
+  LinksSize?: number,
+  DataSize?: number,
+  CumulativeSize: number
+}
+
 export interface ProcessInfo {
   address: string,
   total: number,
   complete: number,
+  success: number,
   remaining: number,
   completeOrder: string[]
 }
 
-export interface OrderQueueInfo {
-  queue: string[],
-  dir: string,
-  dirSize: number,
-  dirNum: number,
-  retryMap: Map<string, boolean>
+export interface NFTItemInfo {
+  id: string,
+  link: string
+}
+
+export interface CidProcessInfo {
+  root: CID,
+  cidNum: number
 }

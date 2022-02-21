@@ -12,7 +12,7 @@
   },
   "scripts": {
     "debug": "nodemon src/index.ts",
-    "start": "node build/src/index.js",
+    "start": "node --trace-warnings build/src/index.js",
     "build": "tsc -p ./"
   },
   "devDependencies": {
@@ -25,9 +25,15 @@
   },
   "dependencies": {
     "httpclient": "^0.1.0",
+    "@ipld/dag-cbor": "^7.0.0",
+    "@ipld/dag-pb": "^2.1.15",
+    "multiformats": "^9.6.4",
     "ipfs": "^0.59.1",
-    "ipfs-http-client": "^53.0.1",
+    "ipfs-repo": "^14.0.1",
+    "ipfs-http-client": "^55.0.0",
     "ipfsd-ctl": "^10.0.4",
+    "datastore-fs": "^7.0.0",
+    "blockstore-datastore-adapter": "^2.0.3",
     "async-lock": "^1.3.0",
     "cli-progress": "^3.9.1",
     "dotenv": "^8.2.0",

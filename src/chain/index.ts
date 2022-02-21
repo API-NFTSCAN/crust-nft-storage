@@ -1,7 +1,7 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { typesBundleForPolkadot, types } from '@crustio/type-definitions';
 import { checkCid, checkSeeds, sendTx, sleep } from '../utils/utils';
-import { chainAddr, seeds } from '../consts'
+import { CHAIN_ADDR, SEEDS } from '../consts'
 
 export default class Chain {
   private chainApi: any
@@ -9,7 +9,7 @@ export default class Chain {
   async connect2Chain() {
     // Try to connect to Crust Chain
     this.chainApi = new ApiPromise({
-      provider: new WsProvider(chainAddr),
+      provider: new WsProvider(CHAIN_ADDR),
       typesBundle: typesBundleForPolkadot
     });
     await this.chainApi.isReadyOrError;
@@ -24,7 +24,7 @@ export default class Chain {
     if (!checkCid(cid)) {
       throw new Error(`Illegal cid:'${cid}'`);
     }
-    if (!checkSeeds(seeds)) {
+    if (!checkSeeds(SEEDS)) {
       throw new Error('Illegal seeds');
     }
 
@@ -36,14 +36,14 @@ export default class Chain {
 
       // Send tx and disconnect chain
       try {
-        txRes = await sendTx(tx, seeds);
+        txRes = await sendTx(tx, SEEDS);
       } catch(e: any) {
         console.error('Send transaction failed')
       }
       if (txRes) {
         break
       }
-      console.log(`Send tx cid:${cid} failed, try again...${tryout}`)
+      //console.log(`Send tx cid:${cid} failed, try again...${tryout}`)
       await sleep(3000)
     }
 
