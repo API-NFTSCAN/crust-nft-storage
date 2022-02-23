@@ -52,6 +52,7 @@ async function main() {
         const address = url.searchParams.get('address')
         const orderNumLimit = url.searchParams.get('orderNumLimit')
         const orderSizeLimit = url.searchParams.get('orderSizeLimit')
+        const sync = url.searchParams.get('sync')
         if (address !== null) {
           const runningTask = ni.getRunningTask()
           if (runningTask !== '') {
@@ -73,8 +74,13 @@ async function main() {
                 paramInfo += ` Invalid parameter orderSizeLimit:${orderSizeLimit}, use default:${orderSizeDefault}.`
               }
             }
-            ni.doProcess(address)
-            resMsg = `task(address:${address}) added successfully!` + paramInfo
+            if (sync === 'true') {
+              await ni.doProcess(address)
+              resMsg = `task(address:${address}) has been done!` + paramInfo
+            } else {
+              ni.doProcess(address)
+              resMsg = `task(address:${address}) added successfully!` + paramInfo
+            }
           }
         } else {
           resMsg = 'illegal parameter, need parameter:address'

@@ -1,5 +1,5 @@
 import NFTIterator from '../utils/nftIterator';
-import { httpPost, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
+import { httpPost, httpGet, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
 import { CidProcessInfo, ProcessInfo, NFTItemInfo } from '../types/types';
 import Chain from '../chain';
 import Ipfs from '../ipfs';
@@ -14,10 +14,12 @@ import {
   NFT_DOWNLOAD_TIMEOUT } from '../consts';
 import _colors from 'colors';
 import { CID } from 'multiformats/cid';
+import { AxiosInstance } from 'axios';
 
 const AsyncLock = require('async-lock')
 const cliProgress = require('cli-progress')
 const { SingleBar } = require('cli-progress')
+const axios = require('axios')
 require('events').EventEmitter.defaultMaxListeners = 100;
 
 const lock = new AsyncLock()
@@ -42,6 +44,7 @@ export default class NFTScan {
   private orderSizeLimit: number
   private orderNumLimit: number
   private stop: boolean
+  private axiosInst: AxiosInstance
 
   constructor() {
     this.ipfs = new Ipfs()
@@ -57,6 +60,7 @@ export default class NFTScan {
     this.processNum = 0
     this.failedItems = []
     this.stop = false
+    this.axiosInst = axios.create()
   }
 
   async init() {
@@ -109,7 +113,7 @@ export default class NFTScan {
       }, cliProgress.Presets.shades_classic);
 
       // Get metadata
-      let getRes = await httpPost(`${NFT_LIST_URL}?nft_address=${address}&page_index=1&page_size=1`)
+      let getRes = await httpGet(`${NFT_LIST_URL}?nft_address=${address}&page_index=1&page_size=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
         return
@@ -141,7 +145,7 @@ export default class NFTScan {
       this.chain.disconnect()
 
     } catch(e: any) {
-      console.error(e.message)
+      //console.error(e.message)
     } finally {
       this.processBar.stop()
       let nftStatus = 0
@@ -198,60 +202,40 @@ export default class NFTScan {
     const that = this
     return new Promise(async (resolve, reject) => {
       let onRes = false
+      let cid = ''
       const link = item.link
       if (link.startsWith("http")) {
-        let recvData: Buffer = Buffer.alloc(0)
-        await new Promise((resolveInner, rejectInner) => {
-          let isTimeout = false
-          const req = https.get(link, { timeout : NFT_DOWNLOAD_TIMEOUT }, async function(res: any) {
-            if (res.statusCode === 200) {
-              res.on('data', (d: any) => {
-                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
-              })
-              res.on('end', async () => {
-                try {
-                  if (res.complete) {
-                    const { cid } = await that.ipfs.add(item.id, recvData)
-                    resolveInner(cid.toString())
-                  } else {
-                    rejectInner()
-                  }
-                } catch (e) {
-                  rejectInner()
-                }
-              })
-            } else {
-              rejectInner()
-            }
-          })
-          req.on('timeout', () => {
-            rejectInner()
-            isTimeout = true
-            req.destroy()
-          })
-          req.on('error', (e: any) => {
-            if (!isTimeout) {
-              rejectInner()
-            }
-          })
-        }).then(async (cid: any) => {
-          onRes = await that.addAndOrder({
-            id: item.id,
-            link: cid as unknown as string
-          })
-        }).catch((e: any) => {
-        })
+        cid = await that.getCidFromUrl(item)
       } else if (link.startsWith("Qm")) {
-        onRes = await that.addAndOrder({
-          id: item.id,
-          link: link
-        })
+        cid = link
       } else {
         that.refreshProgress(link)
         onRes = true
       }
+      if (cid !== '') {
+        onRes = await that.addAndOrder({
+          id: item.id,
+          link: cid
+        })
+        onRes = true
+      }
       onRes ? resolve('') : resolve(item)
     })
+  }
+
+  private async getCidFromUrl(item: NFTItemInfo) {
+    try {
+      const res = await this.axiosInst.get(item.link, {
+        timeout : NFT_DOWNLOAD_TIMEOUT,
+        responseType: 'arraybuffer'
+      })
+      if (res.status === 200) {
+        const { cid } = await this.ipfs.add(item.id, res.data)
+        return cid.toString()
+      }
+    } catch (e) {
+    }
+    return ''
   }
 
   private async addAndOrder(item: NFTItemInfo) {

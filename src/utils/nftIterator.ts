@@ -1,4 +1,4 @@
-import { httpPost } from './utils';
+import { httpGet } from './utils';
 import { NFTItemInfo } from '../types/types';
 
 export default class NFTIterator {
@@ -22,7 +22,7 @@ export default class NFTIterator {
       return true
     }
     const reqUrl = `${this.url}?nft_address=${this.address}&page_index=${this.pageIndex}&page_size=${this.pageSizeLimit}`
-    const getRes = await httpPost(reqUrl)
+    const getRes = await httpGet(reqUrl)
     if (!getRes.status) {
       console.error(`Request ${reqUrl} failed`)
       return false
@@ -46,7 +46,7 @@ export default class NFTIterator {
     let nftUrls = this.preUrls.splice(0, this.pageSize)
     while (nftUrls.length < this.pageSize) {
       const reqUrl = `${this.url}?nft_address=${this.address}&page_index=${this.pageIndex}&page_size=${this.pageSizeLimit}`
-      const getRes = await httpPost(reqUrl)
+      const getRes = await httpGet(reqUrl)
       if (!getRes.status) {
         console.error(`Request ${reqUrl} failed`)
         return []
