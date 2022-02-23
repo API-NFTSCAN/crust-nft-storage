@@ -90,6 +90,9 @@ export default class Ipfs {
       // This just means we dont try to connect to the network which isn't necessary
       // to demonstrate custom repos
       config: {
+        Routing: {
+          Type: 'dhtclient'
+        }
       }
     })
     //const config = await node.config.getAll()
