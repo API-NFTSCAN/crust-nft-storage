@@ -1,5 +1,5 @@
 import NFTIterator from '../utils/nftIterator';
-import { httpPost, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
+import { httpPost, httpGet, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
 import { CidProcessInfo, ProcessInfo, NFTItemInfo } from '../types/types';
 import Chain from '../chain';
 import Ipfs from '../ipfs';
@@ -14,17 +14,20 @@ import {
   NFT_DOWNLOAD_TIMEOUT } from '../consts';
 import _colors from 'colors';
 import { CID } from 'multiformats/cid';
+import { AxiosInstance } from 'axios';
 
 const AsyncLock = require('async-lock')
 const cliProgress = require('cli-progress')
 const { SingleBar } = require('cli-progress')
+const axios = require('axios')
+const bluebird = require('bluebird')
 require('events').EventEmitter.defaultMaxListeners = 100;
 
 const lock = new AsyncLock()
 const ipfsLock = 'ipfsLock'
 const orderLock = 'orderLock'
 const storePrefix = 'nft-'
-const maxDownloadNum = 50
+const maxDownloadNum = 32
 
 const orderSizeLowerLimit = 100 * 1024 * 1024
 const orderSizeUpperLimit = 10 * 1024 * 1024 * 1024
@@ -42,6 +45,7 @@ export default class NFTScan {
   private orderSizeLimit: number
   private orderNumLimit: number
   private stop: boolean
+  private axiosInst: AxiosInstance
 
   constructor() {
     this.ipfs = new Ipfs()
@@ -57,6 +61,7 @@ export default class NFTScan {
     this.processNum = 0
     this.failedItems = []
     this.stop = false
+    this.axiosInst = axios.create()
   }
 
   async init() {
@@ -99,7 +104,7 @@ export default class NFTScan {
 
   async doProcess(address: string) {
     try {
-      console.log(`=> Dealing with address:${address} with order number limit:${this.orderNumLimit} and order size limit:${this.orderSizeLimit}`)
+      console.log(`=> Dealing with address:${address} with order number limit:${this.orderNumLimit}`)
       this.processInfo.address = address
 
       // create a new progress bar instance and use shades_classic theme
@@ -109,7 +114,7 @@ export default class NFTScan {
       }, cliProgress.Presets.shades_classic);
 
       // Get metadata
-      let getRes = await httpPost(`${NFT_LIST_URL}?nft_address=${address}&page_index=1&page_size=1`)
+      let getRes = await httpGet(`${NFT_LIST_URL}?nft_address=${address}&page_index=1&page_size=1`)
       if (!getRes.status) {
         console.error('Request failed, please try again.')
         return
@@ -141,7 +146,7 @@ export default class NFTScan {
       this.chain.disconnect()
 
     } catch(e: any) {
-      console.error(e.message)
+      //console.error(e.message)
     } finally {
       this.processBar.stop()
       let nftStatus = 0
@@ -169,89 +174,56 @@ export default class NFTScan {
 
   private async _doProcess(items: NFTItemInfo[]) {
     let tryout = 3
-    let failedArray: NFTItemInfo[] = []
-    let tasks = []
+    let failedTasks = []
     while (true) {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        tasks.push(this.getTask(item))
-        if (tasks.length === maxDownloadNum || i === items.length - 1) {
-          await Promise.all(tasks).then((items: any) => {
-            for (const item of items) {
-              if (item !== '')
-                failedArray.push(item)
-            }
-          }).catch((e: any) => {})
-          tasks = []
-        }
-      }
-      if (failedArray.length === 0 || --tryout <= 0) {
+      const results = await bluebird.map(items, (it: any) => this.getTask(it), { concurrency : maxDownloadNum })
+      failedTasks = results.filter((r: any) => r !== '')
+      if (failedTasks.length === 0 || --tryout <= 0) {
         break
       }
-      items = failedArray
-      failedArray = []
+      items = failedTasks
+      failedTasks = []
     }
-    Array.prototype.push.apply(this.failedItems, failedArray)
+    Array.prototype.push.apply(this.failedItems, failedTasks)
   }
 
   private getTask(item: NFTItemInfo) {
-    const that = this
     return new Promise(async (resolve, reject) => {
       let onRes = false
+      let cid = ''
       const link = item.link
       if (link.startsWith("http")) {
-        let recvData: Buffer = Buffer.alloc(0)
-        await new Promise((resolveInner, rejectInner) => {
-          let isTimeout = false
-          const req = https.get(link, { timeout : NFT_DOWNLOAD_TIMEOUT }, async function(res: any) {
-            if (res.statusCode === 200) {
-              res.on('data', (d: any) => {
-                recvData = Buffer.concat([recvData, d], recvData.length + d.length)
-              })
-              res.on('end', async () => {
-                try {
-                  if (res.complete) {
-                    const { cid } = await that.ipfs.add(item.id, recvData)
-                    resolveInner(cid.toString())
-                  } else {
-                    rejectInner()
-                  }
-                } catch (e) {
-                  rejectInner()
-                }
-              })
-            } else {
-              rejectInner()
-            }
-          })
-          req.on('timeout', () => {
-            rejectInner()
-            isTimeout = true
-            req.destroy()
-          })
-          req.on('error', (e: any) => {
-            if (!isTimeout) {
-              rejectInner()
-            }
-          })
-        }).then(async (cid: any) => {
-          onRes = await that.addAndOrder({
-            id: item.id,
-            link: cid as unknown as string
-          })
-        }).catch((e: any) => {
-        })
+        cid = await this.getCidFromUrl(item)
       } else if (link.startsWith("Qm")) {
-        onRes = await that.addAndOrder({
-          id: item.id,
-          link: link
-        })
+        cid = link
       } else {
-        that.refreshProgress(link)
+        this.refreshProgress(link)
+        onRes = true
+      }
+      if (cid !== '') {
+        onRes = await this.addAndOrder({
+          id: item.id,
+          link: cid
+        })
         onRes = true
       }
       onRes ? resolve('') : resolve(item)
     })
+  }
+
+  private async getCidFromUrl(item: NFTItemInfo) {
+    try {
+      const res = await this.axiosInst.get(item.link, {
+        timeout : NFT_DOWNLOAD_TIMEOUT,
+        responseType: 'arraybuffer'
+      })
+      if (res.status === 200) {
+        const { cid } = await this.ipfs.add(item.id, res.data)
+        return cid.toString()
+      }
+    } catch (e) {
+    }
+    return ''
   }
 
   private async addAndOrder(item: NFTItemInfo) {
@@ -288,13 +260,13 @@ export default class NFTScan {
         const res = await that.chain.order(cid, size)
         if (res) {
           that.processInfo.completeOrder.push(cid)
-          let links: NFTItemInfo[] = []
-          for (const file of await that.ipfs.ls(cid)) {
-            links.push({
+          const files = await that.ipfs.ls(cid)
+          const links = files.map((file: any) => {
+            return {
               id: file.name.substr(prefixLen),
               link: file.cid.toString()
-            })
-          }
+            }
+          })
           orderRes = true
           await that.updateUpstream(links, cid)
         }
@@ -328,36 +300,20 @@ export default class NFTScan {
     // Update nft address with Crust network order id. If you want to get a nft's replica,
     // corresponding order id with this nft should be recorded in NFTScan's database
     const orgLen = items.length
-    let tasks = []
-    let failedArray: NFTItemInfo[] = []
+    let failedTasks: NFTItemInfo[] = []
     let tryout = 3
     while (true) {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        tasks.push(new Promise(async (resolve, reject) => {
-          let res = await httpPost(`${NFT_UPDATETOKENURI_URL}?nft_address=${this.processInfo.address}&nft_token_id=${item.id}&nft_tokenuri=${item.link}$nft_token_order_id=${orderId}`)
-          res.status ? resolve('') : resolve(item)
-        }).catch((e: any) => {
-          failedArray.push(item)
-        }))
-        if (tasks.length === maxDownloadNum || i === items.length - 1) {
-          await Promise.all(tasks).then((values: any) => {
-            for (const val of values) {
-              if (val !== '') {
-                failedArray.push(val)
-              }
-            }
-          })
-          tasks = []
-        }
-      }
-      if (failedArray.length === 0 || --tryout <= 0) {
+      const results = await bluebird.map(items, (it: any) => {
+        httpPost(`${NFT_UPDATETOKENURI_URL}?nft_address=${this.processInfo.address}&nft_token_id=${it.id}&nft_tokenuri=${it.link}$nft_token_order_id=${orderId}`)
+      }, { concurrency : maxDownloadNum })
+      failedTasks = results.filter((r: any) => r !== '')
+      if (failedTasks.length === 0 || --tryout <= 0) {
         break
       }
-      items = failedArray
-      failedArray = []
+      items = failedTasks
+      failedTasks = []
     }
-    this.processInfo.success += orgLen - failedArray.length
+    this.processInfo.success += orgLen - failedTasks.length
   }
 
   getProcessInfo(): ProcessInfo {
