@@ -8,6 +8,8 @@ import https from 'https';
 import http from 'http';
 import fs from 'fs';
 const request = require('request');
+const axios = require('axios')
+const axiosInstance = axios.create()
 
 /* PUBLIC METHODS */
 /**
@@ -51,33 +53,10 @@ export function sleep(microsec: number) {
  * @returns promise
  */
 export function httpGet(url: string): Promise<HttpRes> {
-  return new Promise((resolve, reject) => {
-    try {
-      request.get(url, {timeout : HTTP_TIMEOUT}, function(err: any, res: any, body: any) {
-        if (err !== null) {
-          reject({ 
-            status: false,
-          })
-        } else {
-          const { statusCode } = res
-          if (statusCode === 200 ) {
-            resolve({
-              status: true,
-              data: body
-            })
-          } else {
-            reject({ 
-              status: false,
-            })
-          }
-        }
-      })
-    } catch (e) {
-      reject({ 
-        status: false,
-      })
-    }
-  });
+  return axiosInstance.get(url, {
+    timeout: HTTP_TIMEOUT,
+    responseType: 'arraybuffer'
+  })
 }
 
 /**
@@ -86,34 +65,10 @@ export function httpGet(url: string): Promise<HttpRes> {
  * @returns promise
  */
 export function httpPost(url: string): Promise<HttpRes> {
-  return new Promise((resolve, reject) => {
-    try {
-      request.post(url, {timeout : HTTP_TIMEOUT}, function(err: any, res: any, body: any) {
-        if (err !== null) {
-          reject({
-            status: false,
-          })
-        } else {
-          let bodyJson = JSON.parse(body)
-          const { code } = bodyJson
-          if (code === 200 ) {
-            resolve({
-              status: true,
-              data: body
-            })
-          } else {
-            reject({ 
-              status: false,
-            })
-          }
-        }
-      })
-    } catch (e) {
-      reject({ 
-        status: false,
-      })
-    }
-  });
+  return axiosInstance.post(url, {
+    timeout: HTTP_TIMEOUT,
+    responseType: 'arraybuffer'
+  })
 }
 
 /**
