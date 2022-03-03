@@ -24,7 +24,9 @@ async function main() {
   console.log(config)
 
   const ni = new NFTScan()
-  await ni.init();
+  const initRes = await ni.init()
+  if (!initRes)
+    return
 
   // Create a local server to receive data from
   const server = http.createServer();

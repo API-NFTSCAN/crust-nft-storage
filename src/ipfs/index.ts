@@ -3,8 +3,8 @@ import { CID } from 'multiformats/cid';
 import { PinFileItem, PinResult, IpfsObjectInfo } from '../types/types';
 import * as IPFS from 'ipfs-core'
 import { IPFS_TIMEOUT, IPFS_HOMEDIR } from '../consts';
+import { create } from 'ipfs-http-client'
 
-const { create } = require('ipfs-core')
 const { createRepo } = require('ipfs-repo')
 const FSLock = require('ipfs-repo/locks/fs')
 const { FsDatastore } = require('datastore-fs')
@@ -33,73 +33,9 @@ export default class Ipfs {
   }
 
   async startIPFS() {
-    // Support dag-pb and dag-cbor at a minimum
-    const loadCodec = (nameOrCode: any) => {
-      if (codecs[nameOrCode]) {
-        return codecs[nameOrCode]
-      }
-      throw new Error(`Could not load codec for ${nameOrCode}`)
-    }
-
-    // Initialize our IPFS node with the custom repo options
-    const node = await create({
-      repo: createRepo(IPFS_HOMEDIR, loadCodec, {
-        /**
-         * IPFS repos store different types of information in separate datastores.
-         * Each storage backend can use the same type of datastore or a different one — for example
-         * you could store your keys in a levelDB database while everything else is in files.
-         * See https://www.npmjs.com/package/interface-datastore for more about datastores.
-         */
-        root: new FsDatastore(IPFS_HOMEDIR, {
-          extension: '.ipfsroot', // Defaults to '', appended to all files
-          errorIfExists: false, // If the datastore exists, don't throw an error
-          createIfMissing: true // If the datastore doesn't exist yet, create it
-        }),
-        // blocks is a blockstore, all other backends are datastores - but we can wrap a datastore
-        // in an adapter to turn it into a blockstore
-        blocks: new BlockstoreDatastoreAdapter(
-          new FsDatastore(`${IPFS_HOMEDIR}/blocks`, {
-            extension: '.ipfsblock',
-            errorIfExists: false,
-            createIfMissing: true
-          })
-        ),
-        keys: new FsDatastore(`${IPFS_HOMEDIR}/keys`, {
-          extension: '.ipfskey',
-          errorIfExists: false,
-          createIfMissing: true
-        }),
-        datastore: new FsDatastore(`${IPFS_HOMEDIR}/datastore`, {
-          extension: '.ipfsds',
-          errorIfExists: false,
-          createIfMissing: true
-        }),
-        pins: new FsDatastore(`${IPFS_HOMEDIR}/pins`, {
-          extension: '.ipfspin',
-          errorIfExists: false,
-          createIfMissing: true
-        })
-      }, {
-        /**
-         * A custom lock can be added here. Or the build in Repo `fs` or `memory` locks can be used.
-         * See https://github.com/ipfs/js-ipfs-repo for more details on setting the lock.
-         */
-        lock: FSLock
-      }),
-
-      // This just means we dont try to connect to the network which isn't necessary
-      // to demonstrate custom repos
-      config: {
-        Routing: {
-          Type: 'dhtclient'
-        }
-      }
-    })
-    //const config = await node.config.getAll()
-    //console.log(config)
-    //const info = await node.id()
-    //console.log(info)
-    this.ipfsClient = node
+    this.ipfsClient = create()
+    //const { cid } = await this.ipfsClient.add('Hello world!')
+    //console.log(cid)
   }
 
   async add(path: string, content: Buffer) {

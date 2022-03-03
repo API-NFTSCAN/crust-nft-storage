@@ -1,12 +1,11 @@
 import NFTIterator from '../utils/nftIterator';
-import { httpPost, httpGet, sleep, getDirFileNum, padLeftZero } from '../utils/utils';
+import { httpPost, httpGet, sleep, padLeftZero } from '../utils/utils';
 import { CidProcessInfo, ProcessInfo, NFTItemInfo } from '../types/types';
 import Chain from '../chain';
 import Ipfs from '../ipfs';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
-import { mkdtemp } from 'fs/promises';
 import {
   NFT_LIST_URL,
   NFT_UPDATETOKENURI_URL,
@@ -26,7 +25,6 @@ require('events').EventEmitter.defaultMaxListeners = 100;
 const lock = new AsyncLock()
 const ipfsLock = 'ipfsLock'
 const orderLock = 'orderLock'
-const storePrefix = 'nft-'
 const maxDownloadNum = 32
 
 const orderSizeLowerLimit = 100 * 1024 * 1024
@@ -65,10 +63,15 @@ export default class NFTScan {
   }
 
   async init() {
-    // Start IPFS
-    await this.ipfs.startIPFS()
-
-    this.initProcessInfo()
+    try {
+      // Start IPFS
+      await this.ipfs.startIPFS()
+      this.initProcessInfo()
+      return true
+    } catch (e: any) {
+      console.log(e.message)
+    }
+    return false
   }
 
   private async initCidInfo() {
@@ -137,7 +140,8 @@ export default class NFTScan {
       let itemIter = new NFTIterator(NFT_LIST_URL, address, this.orderNumLimit)
       while(await itemIter.hasNext() && !this.stop) {
         const items = await itemIter.nextUrls()
-        await this._doProcess(items)
+        const failedTasks = await this._doProcess(items)
+        Array.prototype.push.apply(this.failedItems, failedTasks)
       }
 
       // Deal with failed
@@ -184,7 +188,7 @@ export default class NFTScan {
       items = failedTasks
       failedTasks = []
     }
-    Array.prototype.push.apply(this.failedItems, failedTasks)
+    return failedTasks
   }
 
   private getTask(item: NFTItemInfo) {
@@ -281,7 +285,7 @@ export default class NFTScan {
     try {
       // Retry failed items
       if (this.failedItems.length > 0) {
-        await this._doProcess(this.failedItems)
+        this.failedItems = await this._doProcess(this.failedItems)
       }
 
       // Order left cids
