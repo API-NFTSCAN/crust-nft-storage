@@ -12,7 +12,7 @@
   },
   "scripts": {
     "debug": "nodemon src/index.ts",
-    "start": "node --trace-warnings build/src/index.js",
+    "start": "./scripts/start.sh && node --trace-warnings build/src/index.js",
     "build": "tsc -p ./"
   },
   "devDependencies": {
@@ -30,7 +30,7 @@
     "multiformats": "^9.6.4",
     "ipfs": "^0.59.1",
     "ipfs-repo": "^14.0.1",
-    "ipfs-http-client": "^55.0.0",
+    "ipfs-http-client": "^56.0.1",
     "ipfsd-ctl": "^10.0.4",
     "datastore-fs": "^7.0.0",
     "blockstore-datastore-adapter": "^2.0.3",
