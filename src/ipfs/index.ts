@@ -2,7 +2,7 @@ import { globSource } from 'ipfs';
 import { CID } from 'multiformats/cid';
 import { PinFileItem, PinResult, IpfsObjectInfo } from '../types/types';
 import * as IPFS from 'ipfs-core'
-import { IPFS_TIMEOUT, IPFS_HOMEDIR } from '../consts';
+import { IPFS_TIMEOUT } from '../consts';
 import { create } from 'ipfs-http-client'
 
 const { createRepo } = require('ipfs-repo')

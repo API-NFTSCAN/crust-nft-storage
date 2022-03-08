@@ -26,7 +26,6 @@ NFT_UPDATETOKENURI_URL="http://<xxx>/ipfs/updateTokenUri"
 NFT_UPDATESTATUS_URL="http://<xxx>/ipfs/updateStatus"
 NFT_DOWNLOAD_TIMEOUT=180000
 IPFS_TIMEOUT="120s"
-IPFS_HOMEDIR="/tmp/crust/.ipfs"
 SERVER_PORT=8765
 ```
 
@@ -37,7 +36,6 @@ SERVER_PORT=8765
 1. NFT_UPDATESTATUS_URL: required, update nft address status
 1. NFT_DOWNLOAD_TIMEOUT: optional, nft download timeout, default is 180s
 1. IPFS_TIMEOUT: optional, ipfs operation timeout, default is 120s
-1. IPFS_HOMEDIR: required, ipfs home directory
 1. SERVER_PORT: required, server listen port, default is 8765
 
 ### Start service
