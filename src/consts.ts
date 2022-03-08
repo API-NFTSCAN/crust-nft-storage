@@ -11,5 +11,4 @@ export const NFT_UPDATETOKENURI_URL = process.env.NFT_UPDATETOKENURI_URL as stri
 export const NFT_UPDATESTATUS_URL = process.env.NFT_UPDATESTATUS_URL as string;
 export const NFT_DOWNLOAD_TIMEOUT = parseInt(process.env.NFT_DOWNLOAD_TIMEOUT as string);
 export const IPFS_TIMEOUT = process.env.IPFS_TIMEOUT as string;
-export const IPFS_HOMEDIR = process.env.IPFS_HOMEDIR as string;
 export const HTTP_TIMEOUT:number = 600000

@@ -5,8 +5,7 @@ import {
   CHAIN_ADDR,
   NFT_LIST_URL,
   NFT_UPDATETOKENURI_URL,
-  NFT_UPDATESTATUS_URL,
-  IPFS_HOMEDIR } from './consts'
+  NFT_UPDATESTATUS_URL } from './consts'
 import { checkReplica, isNumeric } from './utils/utils'
 
 const http = require('http');
@@ -17,7 +16,6 @@ async function main() {
     nftListUrl: NFT_LIST_URL,
     nftUpdateTokenUriUrl: NFT_UPDATETOKENURI_URL,
     nftUpdateStatusUrl: NFT_UPDATESTATUS_URL,
-    ipfsHomeDir: IPFS_HOMEDIR,
     port: SERVER_PORT
   }
   console.log('Config:')
